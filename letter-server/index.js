@@ -37,7 +37,8 @@ if (NODE_ENV === 'production') {
 // Security: Add security headers
 app.use(helmet({
   contentSecurityPolicy: NODE_ENV === 'production' ? undefined : false, // Disable in dev for easier debugging
-  crossOriginEmbedderPolicy: false // Allow embedding if needed
+  crossOriginEmbedderPolicy: false, // Allow embedding if needed
+  crossOriginOpenerPolicy: false // Allow popups for Firebase Auth (client already sets unsafe-none)
 }));
 
 // Security: Configure CORS - restrict to production domain in production
