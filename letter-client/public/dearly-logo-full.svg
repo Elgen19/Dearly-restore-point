@@ -1,0 +1,63 @@
+<svg width="300" height="80" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for the logo text -->
+    <linearGradient id="fullGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f43f5e;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Gradient for the envelope icon -->
+    <linearGradient id="envelopeFullGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:0.9" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Envelope icon on the left -->
+  <g transform="translate(5, 20)">
+    <!-- Envelope body -->
+    <path d="M 0 0 L 15 10 L 30 0 L 30 25 L 0 25 Z" 
+          fill="url(#envelopeFullGradient)" 
+          stroke="url(#fullGradient)"
+          stroke-width="1.5"
+          stroke-linejoin="round"
+          opacity="0.9"/>
+    
+    <!-- Envelope flap -->
+    <path d="M 0 0 L 15 10 L 30 0" 
+          fill="none"
+          stroke="url(#fullGradient)"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          opacity="0.6"/>
+    
+    <!-- Heart seal on envelope -->
+    <path d="M 12 12 Q 12 10, 13.5 10 Q 15 10, 15 12 Q 15 10, 16.5 10 Q 18 10, 18 12 Q 18 15, 15 18 Q 12 15, 12 12 Z" 
+          fill="url(#fullGradient)" 
+          opacity="0.8"/>
+  </g>
+  
+  <!-- "Dearly" text -->
+  <text x="50" y="50" 
+        font-family="Georgia, 'Times New Roman', serif" 
+        font-size="42" 
+        font-weight="bold" 
+        fill="url(#fullGradient)"
+        letter-spacing="2">
+    Dearly
+  </text>
+  
+  <!-- Subtle tagline (optional, can be hidden with CSS if needed) -->
+  <text x="50" y="68" 
+        font-family="Georgia, 'Times New Roman', serif" 
+        font-size="12" 
+        font-style="italic" 
+        fill="#9ca3af"
+        letter-spacing="0.5"
+        opacity="0.7">
+    Express your heart, beautifully
+  </text>
+</svg>
+

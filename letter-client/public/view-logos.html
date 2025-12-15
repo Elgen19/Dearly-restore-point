@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dearly Logo Preview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #fef2f2 0%, #fce7f3 50%, #f3e8ff 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #7c3aed;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #9ca3af;
+            margin-bottom: 40px;
+            font-style: italic;
+        }
+        
+        .logo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .logo-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .logo-card h2 {
+            color: #374151;
+            font-size: 1.25rem;
+            margin-bottom: 10px;
+        }
+        
+        .logo-card p {
+            color: #6b7280;
+            font-size: 0.875rem;
+            text-align: center;
+        }
+        
+        .logo-preview {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100px;
+            width: 100%;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+        
+        .logo-preview.dark {
+            background: #1f2937;
+        }
+        
+        .size-info {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-top: 10px;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .color-swatch {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+        
+        .color-box {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Dearly Logo Preview</h1>
+        <p class="subtitle">All logo variations and use cases</p>
+        
+        <div class="logo-grid">
+            <!-- Standard Horizontal Logo -->
+            <div class="logo-card">
+                <h2>Standard Horizontal</h2>
+                <div class="logo-preview">
+                    <img src="dearly-logo.svg" alt="Dearly Logo" style="max-width: 100%; height: auto;">
+                </div>
+                <p>Main logo for headers and navigation</p>
+                <span class="size-info">200×60px</span>
+            </div>
+            
+            <!-- Icon Only -->
+            <div class="logo-card">
+                <h2>Icon Only</h2>
+                <div class="logo-preview">
+                    <img src="dearly-logo-icon.svg" alt="Dearly Icon" style="max-width: 100%; height: auto;">
+                </div>
+                <p>App icons and profile pictures</p>
+                <span class="size-info">60×60px</span>
+            </div>
+            
+            <!-- Full Logo with Tagline -->
+            <div class="logo-card full-width">
+                <h2>Full Logo with Tagline</h2>
+                <div class="logo-preview">
+                    <img src="dearly-logo-full.svg" alt="Dearly Full Logo" style="max-width: 100%; height: auto;">
+                </div>
+                <p>Landing pages and marketing materials</p>
+                <span class="size-info">300×80px</span>
+            </div>
+            
+            <!-- Stacked/Vertical -->
+            <div class="logo-card">
+                <h2>Stacked/Vertical</h2>
+                <div class="logo-preview">
+                    <img src="dearly-logo-stacked.svg" alt="Dearly Stacked Logo" style="max-width: 100%; height: auto;">
+                </div>
+                <p>Mobile headers and centered layouts</p>
+                <span class="size-info">120×120px</span>
+            </div>
+            
+            <!-- Monochrome -->
+            <div class="logo-card">
+                <h2>Monochrome</h2>
+                <div class="logo-preview">
+                    <img src="dearly-logo-monochrome.svg" alt="Dearly Monochrome Logo" style="max-width: 100%; height: auto;">
+                </div>
+                <p>Light backgrounds and print materials</p>
+                <span class="size-info">200×60px</span>
+            </div>
+            
+            <!-- Favicon -->
+            <div class="logo-card">
+                <h2>Favicon</h2>
+                <div class="logo-preview">
+                    <img src="dearly-favicon.svg" alt="Dearly Favicon" style="max-width: 100%; height: auto;">
+                </div>
+                <p>Browser tab icon</p>
+                <span class="size-info">32×32px</span>
+            </div>
+            
+            <!-- Dark Background Test -->
+            <div class="logo-card full-width">
+                <h2>Dark Background Test</h2>
+                <div class="logo-preview dark">
+                    <img src="dearly-logo.svg" alt="Dearly Logo" style="max-width: 100%; height: auto; filter: brightness(1.2);">
+                </div>
+                <p>Logo on dark background (with brightness adjustment)</p>
+            </div>
+        </div>
+        
+        <!-- Color Palette -->
+        <div class="logo-card full-width">
+            <h2>Brand Color Palette</h2>
+            <div class="color-swatch">
+                <div>
+                    <div class="color-box" style="background: #f43f5e;"></div>
+                    <p style="margin-top: 5px; font-size: 0.75rem;">Rose<br>#f43f5e</p>
+                </div>
+                <div>
+                    <div class="color-box" style="background: #ec4899;"></div>
+                    <p style="margin-top: 5px; font-size: 0.75rem;">Pink<br>#ec4899</p>
+                </div>
+                <div>
+                    <div class="color-box" style="background: #a855f7;"></div>
+                    <p style="margin-top: 5px; font-size: 0.75rem;">Purple<br>#a855f7</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

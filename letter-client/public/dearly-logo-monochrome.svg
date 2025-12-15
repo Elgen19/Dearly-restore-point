@@ -1,0 +1,12 @@
+<svg width="200" height="60" viewBox="0 0 200 60" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monochrome version using rose color for light backgrounds -->
+  <text x="10" y="38" 
+        font-family="Georgia, 'Times New Roman', serif" 
+        font-size="32" 
+        font-weight="bold" 
+        fill="#f43f5e"
+        letter-spacing="1">
+    Dearly
+  </text>
+</svg>
+

@@ -1,0 +1,53 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for the logo -->
+    <linearGradient id="stackedGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ec4899;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Gradient for the envelope -->
+    <linearGradient id="envelopeStackedGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f43f5e;stop-opacity:0.9" />
+      <stop offset="100%" style="stop-color:#ec4899;stop-opacity:0.9" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Envelope icon on top -->
+  <g transform="translate(30, 10)">
+    <!-- Envelope body -->
+    <path d="M 0 0 L 20 12 L 40 0 L 40 30 L 0 30 Z" 
+          fill="url(#envelopeStackedGradient)" 
+          stroke="url(#stackedGradient)"
+          stroke-width="2"
+          stroke-linejoin="round"
+          opacity="0.9"/>
+    
+    <!-- Envelope flap -->
+    <path d="M 0 0 L 20 12 L 40 0" 
+          fill="none"
+          stroke="url(#stackedGradient)"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          opacity="0.6"/>
+    
+    <!-- Heart seal on envelope -->
+    <path d="M 16 15 Q 16 12, 18 12 Q 20 12, 20 15 Q 20 12, 22 12 Q 24 12, 24 15 Q 24 20, 20 25 Q 16 20, 16 15 Z" 
+          fill="url(#stackedGradient)" 
+          opacity="0.9"/>
+  </g>
+  
+  <!-- "Dearly" text below -->
+  <text x="60" y="75" 
+        font-family="Georgia, 'Times New Roman', serif" 
+        font-size="28" 
+        font-weight="bold" 
+        fill="url(#stackedGradient)"
+        text-anchor="middle"
+        letter-spacing="1.5">
+    Dearly
+  </text>
+</svg>
+
