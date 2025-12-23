@@ -24,11 +24,22 @@ export default function ScrollUnravelPreview({
   const [isClosing, setIsClosing] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   const [showTitleOpener, setShowTitleOpener] = useState(showTitleOpenerProp);
+  const [isMobile, setIsMobile] = useState(false);
   
   // Update showTitleOpener when prop changes
   useEffect(() => {
     setShowTitleOpener(showTitleOpenerProp);
   }, [showTitleOpenerProp]);
+
+  // Check if mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   const animationIntervalRef = useRef(null);
   const animationTimeoutRef = useRef(null);
   const hasInitializedRef = useRef(false);
@@ -426,12 +437,12 @@ export default function ScrollUnravelPreview({
           ref={scrollPaperRef}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-b from-amber-50 via-white to-amber-50 shadow-2xl z-10 flex flex-col overflow-hidden"
           style={{
-            minWidth: "min(650px, 90vw)",
+            minWidth: isMobile ? "85vw" : "min(650px, 90vw)",
             width: "auto",
-            maxWidth: "min(700px, 95vw)",
+            maxWidth: isMobile ? "90vw" : "min(700px, 95vw)",
             height: `${paperHeight}px`,
             minHeight: `${minHeight}px`,
-            padding: "2rem",
+            padding: isMobile ? "0.75rem" : "2rem",
             boxShadow: isOpening || isClosing
               ? `0 20px 60px rgba(255, 215, 0, 0.6), 0 0 80px rgba(255, 192, 203, 0.5), 0 0 120px rgba(255, 182, 193, 0.4)`
               : "0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(255, 215, 0, 0.2)",
@@ -491,7 +502,7 @@ export default function ScrollUnravelPreview({
           {/* Letter Content */}
           <motion.div
             ref={textRef}
-            className="relative z-10 w-full flex-1 overflow-y-auto px-6 py-4 min-h-0"
+            className="relative z-10 w-full flex-1 overflow-y-auto px-3 sm:px-6 py-4 min-h-0"
             style={{
               scrollbarWidth: "thin",
               scrollbarColor: "rgba(217, 119, 6, 0.3) rgba(254, 243, 199, 0.2)",

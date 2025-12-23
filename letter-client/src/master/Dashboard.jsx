@@ -200,15 +200,27 @@ export default function Dashboard({ receiverData, onNavigateToLetters, onNavigat
       if (!currentUser) return;
 
       try {
+        // Get Firebase ID token for authentication
+        const idToken = await currentUser.getIdToken();
         const backendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
-        const response = await fetch(`${backendUrl}/api/auth/user/${currentUser.uid}`);
+        const response = await fetch(`${backendUrl}/api/auth/user/${currentUser.uid}`, {
+          headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const result = await response.json();
 
         if (result.success && result.data && result.data.firstName) {
           setUserFirstName(result.data.firstName);
         }
       } catch (error) {
-        console.log('Could not fetch user profile');
+        console.log('Could not fetch user profile:', error);
         // Fallback: try to get from currentUser.displayName or email
         if (currentUser.displayName) {
           setUserFirstName(currentUser.displayName.trim().split(/\s+/)[0]);
@@ -566,7 +578,8 @@ export default function Dashboard({ receiverData, onNavigateToLetters, onNavigat
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1, duration: 0.6 }}
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 cursor-pointer"
+                  onClick={() => window.location.href = '/'}
                 >
                   <img 
                     src="/dearly-logo.svg" 
@@ -629,7 +642,8 @@ export default function Dashboard({ receiverData, onNavigateToLetters, onNavigat
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1, duration: 0.6 }}
-                className="flex-shrink-0"
+                className="flex-shrink-0 cursor-pointer"
+                onClick={() => window.location.href = '/'}
               >
                 <img 
                   src="/dearly-logo.svg" 

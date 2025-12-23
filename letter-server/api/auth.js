@@ -60,10 +60,7 @@ router.post("/save-google-user", async (req, res) => {
   try {
     const { userId, email, displayName } = req.body;
 
-    console.log('📥 POST /api/auth/save-google-user', { userId, email, displayName });
-
     if (!userId || !email) {
-      console.log('❌ Missing required fields:', { userId: !!userId, email: !!email });
       return res.status(400).json({ 
         success: false, 
         error: "User ID and email are required" 
@@ -71,7 +68,9 @@ router.post("/save-google-user", async (req, res) => {
     }
 
     if (!db) {
-      console.error('❌ Firebase database not initialized');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Firebase database not initialized');
+      }
       return res.status(500).json({ 
         success: false, 
         error: "Database not available" 
@@ -92,13 +91,9 @@ router.post("/save-google-user", async (req, res) => {
       lastName = '';
     }
 
-    console.log('📝 Parsed name:', { firstName, lastName });
-
     const userRef = db.ref(`users/${userId}`);
     const snapshot = await userRef.once('value');
     const existingUser = snapshot.val();
-
-    console.log('👤 Existing user check:', existingUser ? 'User exists' : 'New user');
 
     const now = new Date().toISOString();
 
@@ -123,7 +118,6 @@ router.post("/save-google-user", async (req, res) => {
       }
 
       await userRef.update(updateData);
-      console.log(`✅ Updated Google user data for ${userId}:`, updateData);
     } else {
       // New user - create user record
       const userData = {
@@ -137,7 +131,6 @@ router.post("/save-google-user", async (req, res) => {
       };
       
       await userRef.set(userData);
-      console.log(`✅ Created new Google user record for ${userId}:`, userData);
     }
 
     res.status(200).json({ 
@@ -145,12 +138,14 @@ router.post("/save-google-user", async (req, res) => {
       message: existingUser ? "User data updated" : "User data created"
     });
   } catch (error) {
-    console.error("❌ Save Google user error:", error);
-    console.error("Error stack:", error.stack);
+    if (process.env.NODE_ENV === 'development') {
+      console.error("❌ Save Google user error:", error);
+      console.error("Error stack:", error.stack);
+    }
     res.status(500).json({ 
       success: false, 
       error: "Failed to save user data", 
-      details: error.message 
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -158,66 +153,7 @@ router.post("/save-google-user", async (req, res) => {
 // GET /api/auth/user/:userId
 // Get user profile data
 // Security: Require authentication to view user profiles
-router.get("/user/:userId", async (req, res) => {
-  // In production, require authentication
-  if (process.env.NODE_ENV === 'production') {
-    const { verifyAuth, verifyOwnership } = require("../middleware/auth");
-    // Apply auth middleware
-    return verifyAuth(req, res, () => {
-      verifyOwnership(req, res, async () => {
-        // Continue with original handler logic
-        try {
-          const { userId } = req.params;
-
-          if (!userId) {
-            return res.status(400).json({ 
-              success: false, 
-              error: "User ID is required" 
-            });
-          }
-
-          if (!db) {
-            return res.status(500).json({ 
-              success: false, 
-              error: "Database not available" 
-            });
-          }
-
-          const userRef = db.ref(`users/${userId}`);
-          const snapshot = await userRef.once('value');
-          const userData = snapshot.val();
-
-          if (!userData) {
-            return res.status(404).json({ 
-              success: false, 
-              error: "User not found" 
-            });
-          }
-
-          res.status(200).json({ 
-            success: true,
-            data: {
-              email: userData.email,
-              firstName: userData.firstName || '',
-              lastName: userData.lastName || '',
-              emailVerified: userData.emailVerified || false,
-              createdAt: userData.createdAt,
-              updatedAt: userData.updatedAt
-            }
-          });
-        } catch (error) {
-          console.error("Get user profile error:", error);
-          res.status(500).json({ 
-            success: false, 
-            error: "Failed to get user profile",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-          });
-        }
-      });
-    });
-  }
-  
-  // Development mode - original handler
+const getUserProfileHandler = async (req, res) => {
   try {
     const { userId } = req.params;
 
@@ -257,99 +193,30 @@ router.get("/user/:userId", async (req, res) => {
         updatedAt: userData.updatedAt
       }
     });
-  } catch (error) {
-    console.error("Get user profile error:", error);
-    res.status(500).json({ 
-      success: false, 
-      error: "Failed to get user profile", 
-      details: error.message 
-    });
-  }
-});
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Get user profile error:", error);
+          }
+          res.status(500).json({ 
+            success: false, 
+            error: "Failed to get user profile",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+          });
+        }
+};
+
+// Apply authentication middleware in production, otherwise use handler directly
+if (process.env.NODE_ENV === 'production') {
+  const { verifyAuth, verifyOwnership } = require("../middleware/auth");
+  router.get("/user/:userId", verifyAuth, verifyOwnership, getUserProfileHandler);
+} else {
+  router.get("/user/:userId", getUserProfileHandler);
+}
 
 // PUT /api/auth/user/:userId
 // Update user profile data
 // Security: Require authentication to update user profiles
-router.put("/user/:userId", async (req, res) => {
-  // In production, require authentication
-  if (process.env.NODE_ENV === 'production') {
-    const { verifyAuth, verifyOwnership } = require("../middleware/auth");
-    // Apply auth middleware
-    return verifyAuth(req, res, () => {
-      verifyOwnership(req, res, async () => {
-        // Continue with original handler logic
-        try {
-          const { userId } = req.params;
-          const { firstName, lastName } = req.body;
-
-          if (!userId) {
-            return res.status(400).json({ 
-              success: false, 
-              error: "User ID is required" 
-            });
-          }
-
-          if (!db) {
-            return res.status(500).json({ 
-              success: false, 
-              error: "Database not available" 
-            });
-          }
-
-          const userRef = db.ref(`users/${userId}`);
-          const snapshot = await userRef.once('value');
-          const existingUser = snapshot.val();
-
-          if (!existingUser) {
-            return res.status(404).json({ 
-              success: false, 
-              error: "User not found" 
-            });
-          }
-
-          const updateData = {
-            updatedAt: new Date().toISOString(),
-          };
-
-          if (firstName !== undefined) {
-            updateData.firstName = firstName.trim();
-          }
-
-          if (lastName !== undefined) {
-            updateData.lastName = lastName.trim();
-          }
-
-          await userRef.update(updateData);
-
-          // Get updated user data
-          const updatedSnapshot = await userRef.once('value');
-          const updatedUser = updatedSnapshot.val();
-
-          res.status(200).json({ 
-            success: true,
-            data: {
-              email: updatedUser.email,
-              firstName: updatedUser.firstName || '',
-              lastName: updatedUser.lastName || '',
-              emailVerified: updatedUser.emailVerified || false,
-              createdAt: updatedUser.createdAt,
-              updatedAt: updatedUser.updatedAt
-            },
-            message: "User profile updated successfully"
-          });
-        } catch (error) {
-          console.error("Update user profile error:", error);
-          res.status(500).json({ 
-            success: false, 
-            error: "Failed to update user profile",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-          });
-        }
-      });
-    });
-  }
-  
-  // Development mode - original handler
+const updateUserProfileHandler = async (req, res) => {
   try {
     const { userId } = req.params;
     const { firstName, lastName } = req.body;
@@ -409,15 +276,25 @@ router.put("/user/:userId", async (req, res) => {
       },
       message: "User profile updated successfully"
     });
-  } catch (error) {
-    console.error("Update user profile error:", error);
-    res.status(500).json({ 
-      success: false, 
-      error: "Failed to update user profile", 
-      details: error.message 
-    });
-  }
-});
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error("Update user profile error:", error);
+          }
+          res.status(500).json({ 
+            success: false, 
+            error: "Failed to update user profile",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+          });
+        }
+};
+
+// Apply authentication middleware in production, otherwise use handler directly
+if (process.env.NODE_ENV === 'production') {
+  const { verifyAuth, verifyOwnership } = require("../middleware/auth");
+  router.put("/user/:userId", verifyAuth, verifyOwnership, updateUserProfileHandler);
+} else {
+  router.put("/user/:userId", updateUserProfileHandler);
+}
 
 module.exports = router;
 

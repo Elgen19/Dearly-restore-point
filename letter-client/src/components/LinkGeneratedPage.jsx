@@ -128,7 +128,16 @@ export default function LinkGeneratedPage({ shareableLink, onContinue, receiverE
 
       if (!response.ok || !result.success) {
         // Handle validation errors or other API errors
-        setEmailError(result.error || result.message || 'Failed to send email. Please try again.');
+        let errorMessage = result.error || result.message || 'Failed to send email. Please try again.';
+        
+        // Provide user-friendly messages for common errors
+        if (errorMessage.includes('timeout') || errorMessage.includes('connection')) {
+          errorMessage = 'Email service is temporarily unavailable. Please try again later or contact support.';
+        } else if (errorMessage.includes('authentication') || errorMessage.includes('EAUTH')) {
+          errorMessage = 'Email configuration error. Please contact support.';
+        }
+        
+        setEmailError(errorMessage);
         return;
       }
 

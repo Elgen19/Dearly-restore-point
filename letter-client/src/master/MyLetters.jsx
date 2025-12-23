@@ -1,5 +1,5 @@
 // MyLetters.jsx - View and manage all letters created by the sender
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import ScrollUnravelPreview from '../components/ScrollUnravelPreview';
@@ -8,6 +8,18 @@ import MessageModal from '../components/MessageModal.jsx';
 
 export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
   const { currentUser } = useAuth();
+  const hasPushedStateRef = useRef(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   const [activeTab, setActiveTab] = useState('sent'); // 'sent' or 'responses'
   const [letters, setLetters] = useState([]);
   const [responses, setResponses] = useState([]);
@@ -62,6 +74,56 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
 
     return () => clearInterval(interval);
   }, []);
+
+  // Prevent body scroll when letter detail modal is open
+  useEffect(() => {
+    if (selectedLetter) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        // Restore scroll position when modal closes
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [selectedLetter]);
+
+  // Handle browser back button - call onBack when user presses browser back
+  useEffect(() => {
+    if (!onBack) return;
+    
+    const handlePopState = (event) => {
+      // Only handle if we've pushed a state
+      if (hasPushedStateRef.current) {
+        // Call our custom back handler
+        onBack();
+        // Push state again to stay on current page
+        hasPushedStateRef.current = false; // Reset flag to allow push
+        window.history.pushState({ myLetters: true }, '', window.location.href);
+        hasPushedStateRef.current = true;
+      }
+    };
+
+    // Push current state when component mounts so we can detect back button
+    if (!hasPushedStateRef.current) {
+      window.history.pushState({ myLetters: true }, '', window.location.href);
+      hasPushedStateRef.current = true;
+    }
+    
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onBack]);
 
   // Fetch user's first name
   const fetchUserFirstName = async () => {
@@ -190,7 +252,23 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
     });
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status, variant = 'default') => {
+    // Variant 'header' for use in modal header (white text on colored background)
+    if (variant === 'header') {
+      if (status === 'read') {
+        return (
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 bg-white/20 backdrop-blur-sm text-white text-xs font-medium rounded-full border border-white/30">
+            ✓ Read
+          </span>
+        );
+      }
+      return (
+        <span className="px-2 py-0.5 md:px-2.5 md:py-1 bg-white/20 backdrop-blur-sm text-white text-xs font-medium rounded-full border border-white/30">
+          ● Unread
+        </span>
+      );
+    }
+    // Default variant for use in normal backgrounds
     if (status === 'read') {
       return (
         <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
@@ -238,6 +316,27 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
     setEmailSent(false);
     setEmailError('');
   };
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (selectedLetter || selectedResponse) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        // Restore scroll position when modal closes
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [selectedLetter, selectedResponse]);
 
   const handleDeleteClick = () => {
     setShowDeleteConfirm(true);
@@ -921,11 +1020,19 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
                       <h3 className="text-lg sm:text-xl font-serif font-bold text-gray-800 mb-1 truncate">
                         {letter.introductory || 'Untitled Letter'}
                       </h3>
-                      <p className="text-xs sm:text-sm text-gray-500 font-serif">
-                        {formatDate(letter.createdAt)}
-                      </p>
+                      {/* Mobile: Status badge next to date, Desktop: Status badge on the right */}
+                      <div className="flex items-center gap-2 flex-wrap sm:block">
+                        <p className="text-xs sm:text-sm text-gray-500 font-serif">
+                          {formatDate(letter.createdAt)}
+                        </p>
+                        {/* Status badge on mobile - next to date */}
+                        <div className="sm:hidden">
+                          {getStatusBadge(letter.status)}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-shrink-0">
+                    {/* Status badge on desktop - on the right */}
+                    <div className="hidden sm:flex flex-shrink-0">
                       {getStatusBadge(letter.status)}
                     </div>
                   </div>
@@ -1299,7 +1406,7 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 py-4 sm:p-4"
             onClick={handleCloseDetail}
           >
             <motion.div
@@ -1307,18 +1414,21 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] md:max-h-[90vh] h-[100vh] md:h-auto flex flex-col m-0 md:m-4"
+              className="bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-3xl w-full max-h-[calc(100vh-4rem)] md:max-h-[90vh] flex flex-col my-2 md:my-0 md:m-4"
             >
               {/* Modal Header */}
-              <div className="bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500 p-4 sm:p-6 rounded-t-xl sm:rounded-t-2xl flex-shrink-0">
+              <div className="bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500 p-3 sm:p-6 rounded-t-xl sm:rounded-t-2xl flex-shrink-0">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <h2 className="text-lg sm:text-2xl font-serif font-bold text-white truncate">
                       {selectedLetter.introductory || 'Untitled Letter'}
                     </h2>
-                    <p className="text-white/90 text-xs sm:text-sm font-serif mt-1">
-                      {formatDate(selectedLetter.createdAt)}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <p className="text-white/90 text-xs sm:text-sm font-serif">
+                        {formatDate(selectedLetter.createdAt)}
+                      </p>
+                      {getStatusBadge(selectedLetter.status, 'header')}
+                    </div>
                   </div>
                   <motion.button
                     whileHover={{ scale: 1.1, rotate: 90 }}
@@ -1333,8 +1443,8 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
                 </div>
               </div>
 
-              {/* Modal Content */}
-              <div className="flex-1 overflow-hidden p-4 sm:p-6 flex flex-col min-h-0">
+              {/* Modal Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col min-h-0" style={{ maxHeight: isMobile ? 'calc(100vh - 260px)' : 'calc(100vh - 280px)' }}>
                 {isEditing ? (
                   <textarea
                     value={editContent}
@@ -1352,7 +1462,7 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
                     />
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl p-3 sm:p-6 border-2 border-rose-100 overflow-y-auto">
+                  <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl p-3 sm:p-6 border-2 border-rose-100">
                     <p className="text-gray-700 font-serif text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
                       {selectedLetter.mainBody || ''}
                     </p>
@@ -1362,7 +1472,6 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
                 {/* Letter Info */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   <div className="flex flex-col md:flex-row md:flex-wrap md:items-center gap-2 md:gap-4 text-sm">
-                    {getStatusBadge(selectedLetter.status)}
                     {selectedLetter.emailSent && (
                       <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full font-serif flex items-center gap-1 w-fit">
                         📧 Sent to {selectedLetter.emailSentTo || 'recipient'}
@@ -1383,7 +1492,7 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
               </div>
 
               {/* Modal Footer */}
-              <div className="border-t border-gray-200 p-4 sm:p-6 flex-shrink-0">
+              <div className="border-t border-gray-200 p-3 sm:p-6 flex-shrink-0">
                 {isEditing ? (
                   <div className="flex items-center justify-end gap-2 sm:gap-3">
                     <motion.button
@@ -1416,24 +1525,44 @@ export default function MyLetters({ receiverData, onBack, onCreateLetter }) {
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:flex-wrap">
                         <span className="text-xs font-serif text-gray-500 uppercase tracking-wide sm:mr-2">Share:</span>
                         
-                        {/* Send Email Button - Only show if email wasn't sent initially */}
-                        {!selectedLetter.emailSent && (
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => {
-                              setEmailAddress(receiverData?.email || '');
-                              setShowEmailModal(true);
-                              setEmailError('');
-                            }}
-                            className="px-3 sm:px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-serif text-xs sm:text-sm transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
-                          >
-                            <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            Send Email
-                          </motion.button>
-                        )}
+                        {/* Send Email Button - Only show if email wasn't sent initially AND not a scheduled letter that's already been sent */}
+                        {!selectedLetter.emailSent && (() => {
+                          // Check if this is a scheduled letter that has already been sent
+                          const isScheduled = selectedLetter.emailScheduled === true || selectedLetter.emailScheduled === 'true' || selectedLetter.emailScheduled === 1;
+                          const hasScheduledDateTime = selectedLetter.scheduledDateTime;
+                          
+                          if (isScheduled && hasScheduledDateTime) {
+                            try {
+                              const scheduledDate = new Date(selectedLetter.scheduledDateTime);
+                              const now = new Date();
+                              // If scheduled date has passed, it means the email was already sent (by the cron job)
+                              // So hide the button
+                              if (!isNaN(scheduledDate.getTime()) && scheduledDate <= now) {
+                                return null; // Hide button - email was already sent
+                              }
+                            } catch (error) {
+                              // If date parsing fails, show the button to be safe
+                            }
+                          }
+                          
+                          return (
+                            <motion.button
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                setEmailAddress(receiverData?.email || '');
+                                setShowEmailModal(true);
+                                setEmailError('');
+                              }}
+                              className="px-3 sm:px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-serif text-xs sm:text-sm transition-all flex items-center gap-2 w-full sm:w-auto justify-center"
+                            >
+                              <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              Send Email
+                            </motion.button>
+                          );
+                        })()}
                         
                         {/* Regenerate Token Button */}
                         <motion.button

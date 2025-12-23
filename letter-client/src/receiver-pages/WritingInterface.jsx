@@ -301,7 +301,7 @@ I hope this response brings you the same warmth and comfort your letter brought 
                 />
               </svg>
             </motion.button>
-            <div className="w-full h-full relative">
+            <div className="w-full h-full relative pb-20 md:pb-0">
               <ScrollUnravelPreview
                 letterContent={letterContent}
                 userFirstName={receiverName ? receiverName.split(' ')[0] : ""}
@@ -316,14 +316,14 @@ I hope this response brings you the same warmth and comfort your letter brought 
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-50 flex flex-row gap-2 md:gap-4 w-full md:w-auto px-4 md:px-0 max-w-[calc(100vw-2rem)] md:max-w-none"
+                  className="fixed md:absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-50 flex flex-row gap-2 md:gap-4 w-[calc(100vw-2rem)] md:w-auto max-w-[calc(100vw-2rem)] md:max-w-none px-2 md:px-0"
                 >
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleEdit}
                   disabled={isSaving}
-                  className="flex-1 md:flex-none md:w-auto px-4 md:px-6 py-2.5 md:py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-full font-serif text-sm md:text-lg shadow-lg transition-all border border-white/20 disabled:opacity-50"
+                  className="flex-1 md:flex-none md:w-auto min-w-0 px-3 md:px-6 py-2.5 md:py-3 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white rounded-full font-serif text-xs md:text-lg shadow-lg transition-all border border-white/20 disabled:opacity-50 whitespace-nowrap"
                 >
                   Edit
                 </motion.button>
@@ -332,20 +332,22 @@ I hope this response brings you the same warmth and comfort your letter brought 
                   whileTap={{ scale: 0.95 }}
                   onClick={handleConfirm}
                   disabled={isSaving}
-                  className="flex-1 md:flex-none md:w-auto px-4 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-sm md:text-lg shadow-lg transition-all overflow-hidden group disabled:opacity-50"
+                  className="flex-1 md:flex-none md:w-auto min-w-0 px-3 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-xs md:text-lg shadow-lg transition-all overflow-hidden group disabled:opacity-50 whitespace-nowrap"
                 >
                   {isSaving ? (
-                    <span className="flex items-center justify-center gap-2">
+                    <span className="flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base">
                       <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+                        className="w-3 h-3 md:w-4 md:h-4 border-2 border-white border-t-transparent rounded-full"
                       />
-                      Saving...
+                      <span className="hidden sm:inline">Saving...</span>
+                      <span className="sm:hidden">...</span>
                     </span>
                   ) : (
-                    <span className="relative z-10 flex items-center justify-center gap-2 text-xs md:text-base">
-                      ✉️ Confirm & Send
+                    <span className="relative z-10 flex items-center justify-center gap-1.5 md:gap-2 text-xs md:text-base">
+                      <span className="hidden sm:inline">✉️ Confirm & Send</span>
+                      <span className="sm:hidden">✉️ Send</span>
                     </span>
                   )}
                 </motion.button>
@@ -414,11 +416,11 @@ I hope this response brings you the same warmth and comfort your letter brought 
                       e.stopPropagation();
                       onBack();
                     }}
-                    className="md:hidden absolute top-4 left-4 z-10 w-10 h-10 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 shadow-lg transition-all group"
+                    className="md:hidden absolute top-4 left-4 z-10 w-12 h-12 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 shadow-lg transition-all group"
                     aria-label="Go back"
                   >
                     <svg
-                      className="w-5 h-5 text-white group-hover:text-pink-300 transition-colors"
+                      className="w-6 h-6 text-white group-hover:text-pink-300 transition-colors"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

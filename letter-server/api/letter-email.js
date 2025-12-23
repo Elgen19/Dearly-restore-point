@@ -1,7 +1,7 @@
 // letter-email.js - API endpoint for sending letter share links via email
 const express = require("express");
 const router = express.Router();
-const nodemailer = require("nodemailer");
+const { createMailerTransporter, sendMail } = require("../configs/mailer");
 const { db } = require("../configs/firebase");
 require('dotenv').config();
 
@@ -37,25 +37,31 @@ router.post("/send", async (req, res) => {
       }
     }
 
-    // Create email transporter
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    // Create email transporter (Gmail or Resend) with improved connection settings for production
+    const transporter = createMailerTransporter();
 
     // Default values
     const receiverName = recipientName || "there";
     const sender = senderName || "Someone special";
     const title = letterTitle || "A special letter for you";
 
+    // Plain text version for better deliverability
+    const textContent = `Hello ${receiverName},
+
+${sender} has a special letter for you on Dearly.
+
+Open your letter here: ${shareableLink}
+
+Made with ❤️ by ${sender} for ${receiverName}
+
+If you didn't expect this email, you can safely ignore it.`;
+
     // Custom Dearly email template
     const mailOptions = {
       from: `"Dearly 💌" <${process.env.EMAIL_USER}>`,
       to: recipientEmail,
-      subject: `💌 ${sender} has a letter for you`,
+      subject: `${sender} has a letter for you`,
+      text: textContent,
       html: `
         <!DOCTYPE html>
         <html lang="en">
@@ -169,7 +175,11 @@ router.post("/send", async (req, res) => {
           mailOptions: mailOptions, // Store the full mail options for sending later
         });
 
-        console.log(`📅 Letter email scheduled for: ${recipientEmail} at ${scheduledDateTime} (ID: ${scheduledEmailId})`);
+        // Security: Anonymize email in production logs
+        const logEmail = process.env.NODE_ENV === 'development' 
+          ? recipientEmail 
+          : `${recipientEmail.split('@')[0]}@***`;
+        console.log(`📅 Letter email scheduled for: ${logEmail} at ${scheduledDateTime} (ID: ${scheduledEmailId})`);
         
         res.status(200).json({
           success: true,
@@ -186,24 +196,74 @@ router.post("/send", async (req, res) => {
         });
       }
     } else {
-      // Send email immediately
-      console.log(`📧 Sending letter email to: ${recipientEmail}`);
+      // Send email immediately with retry logic
+      // Security: Anonymize email in production logs
+      const logEmail = process.env.NODE_ENV === 'development' 
+        ? recipientEmail 
+        : `${recipientEmail.split('@')[0]}@***`;
+      console.log(`📧 Sending letter email to: ${logEmail}`);
       
-      await transporter.sendMail(mailOptions);
+      let lastError;
+      const maxRetries = 2;
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          // Send via unified helper (Resend API or SMTP)
+          const sendPromise = sendMail(mailOptions);
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Email send timeout after 25 seconds')), 25000);
+          });
+          
+          await Promise.race([sendPromise, timeoutPromise]);
+          
+          // Security: Anonymize email in production logs
+          const logEmail = process.env.NODE_ENV === 'development' 
+            ? recipientEmail 
+            : `${recipientEmail.split('@')[0]}@***`;
+          console.log(`✅ Letter email sent successfully to: ${logEmail}`);
 
-      console.log(`✅ Letter email sent successfully to: ${recipientEmail}`);
-
-      res.status(200).json({
-        success: true,
-        message: "Letter email sent successfully",
-      });
+          return res.status(200).json({
+            success: true,
+            message: "Letter email sent successfully",
+          });
+        } catch (error) {
+          lastError = error;
+          console.warn(`⚠️ Email send attempt ${attempt + 1}/${maxRetries + 1} failed:`, error.message);
+          
+          // Don't retry on validation errors
+          if (error.responseCode && error.responseCode >= 400 && error.responseCode < 500) {
+            break;
+          }
+          
+          // Wait before retrying (exponential backoff)
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+          }
+        }
+      }
+      
+      // All retries failed
+      throw lastError;
     }
   } catch (error) {
     console.error("❌ Error sending letter email:", error);
+    
+    // Provide user-friendly error messages
+    let errorMessage = "Failed to send letter email";
+    let errorDetails = error.message;
+    
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' || error.message.includes('timeout')) {
+      errorMessage = "Email service connection timeout. Please check your email configuration and network connectivity.";
+      errorDetails = "The email service could not be reached. This may be due to network issues or firewall restrictions.";
+    } else if (error.code === 'EAUTH') {
+      errorMessage = "Email authentication failed. Please check your email credentials.";
+      errorDetails = "Invalid email username or password. Please verify your EMAIL_USER and EMAIL_PASS environment variables.";
+    }
+    
     res.status(500).json({
       success: false,
-      error: "Failed to send letter email",
-      details: error.message,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined,
     });
   }
 });

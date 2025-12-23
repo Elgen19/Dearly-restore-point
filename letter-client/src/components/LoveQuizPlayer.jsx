@@ -1,5 +1,5 @@
 // LoveQuizPlayer.jsx - Play a love quiz
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import RewardFlow from './RewardFlow';
 import GameCompletionScreen from './GameCompletionScreen';
@@ -11,9 +11,34 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
   const [score, setScore] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [startTime] = useState(Date.now());
-  const [showRewardFlow, setShowRewardFlow] = useState(false);
+  const [nextScreen, setNextScreen] = useState(null); // 'rewardFlow' | 'completionScreen' | null
+
+  // Memoize background elements BEFORE any conditional returns (Rules of Hooks)
+  const backgroundStars = useMemo(() => {
+    return Array.from({ length: 100 }, (_, i) => {
+      const size = Math.random() < 0.7 ? 1 : Math.random() < 0.9 ? 2 : 3;
+      return {
+        id: `star-${i}`,
+        size,
+        delay: Math.random() * 5,
+        duration: 3 + Math.random() * 4,
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+      };
+    });
+  }, []);
+
+  const backgroundHearts = useMemo(() => {
+    return Array.from({ length: 8 }, (_, i) => ({
+      id: `heart-${i}`,
+      left: 10 + Math.random() * 80,
+      top: 10 + Math.random() * 80,
+      fontSize: 12 + Math.random() * 20,
+      duration: 4 + Math.random() * 3,
+      delay: Math.random() * 2,
+    }));
+  }, []);
 
   // Shuffle answers for each question
   const shuffledAnswers = useMemo(() => {
@@ -29,6 +54,81 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
     const shuffled = [...allAnswers].sort(() => Math.random() - 0.5);
     return shuffled;
   }, [quiz, currentQuestionIndex]);
+
+  const handleAnswerSelect = (answer) => {
+    setSelectedAnswer(answer);
+  };
+
+  const handleSubmit = useCallback(async (finalAnswers) => {
+    // Calculate score first
+    let correctCount = 0;
+    quiz.questions.forEach((question, index) => {
+      const userAnswer = finalAnswers[index] || '';
+      if (userAnswer.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()) {
+        correctCount++;
+      }
+    });
+
+    const finalScore = Math.round((correctCount / quiz.questions.length) * 100);
+    const passingScore = quiz.settings?.passingScore || 70;
+    const hasPassed = finalScore >= passingScore;
+    
+    // Set score and determine next screen
+    setScore(finalScore);
+    
+    // Always show congratulatory message first, then rewards if available
+    // Set completion and next screen in a single state update to prevent white screen
+    setQuizComplete(true);
+    setNextScreen('completionScreen'); // Always show completion screen first
+
+    const timeTaken = Math.round((Date.now() - startTime) / 1000);
+    console.log('📊 Quiz results:', { finalScore, passingScore, hasPassed, correctCount, totalQuestions: quiz.questions.length });
+
+    // Mark game as completed in the background (don't wait for it) - similar to word scramble
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    
+    // Try to submit quiz result (only if quiz.id exists and is different from gameId)
+    if (quiz.id && quiz.id !== gameId) {
+      fetch(`${backendUrl}/api/quizzes/${userId}/${quiz.id}/submit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          answers: finalAnswers,
+          timeTaken,
+          letterId: letterId || null,
+        }),
+      }).catch(err => console.warn('⚠️ Quiz submission error (non-critical):', err));
+    }
+    
+    // Track game completion in the background (don't wait)
+    if (gameId && userId) {
+      fetch(`${backendUrl}/api/games/${userId}/${gameId}/complete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          passed: hasPassed,
+          score: finalScore,
+        }),
+      }).catch(err => console.error('Error completing game:', err));
+    }
+  }, [quiz, gameId, userId, letterId, startTime]);
+
+  const handleNextQuestion = useCallback((answer = selectedAnswer) => {
+    const newAnswers = [...answers, answer];
+    setAnswers(newAnswers);
+    setSelectedAnswer('');
+
+    if (currentQuestionIndex + 1 >= quiz.questions.length) {
+      // Quiz complete
+      handleSubmit(newAnswers);
+    } else {
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+    }
+  }, [selectedAnswer, answers, currentQuestionIndex, quiz, handleSubmit]);
 
   // Initialize timer
   useEffect(() => {
@@ -49,125 +149,27 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentQuestionIndex, quizComplete]);
-
-  const handleAnswerSelect = (answer) => {
-    setSelectedAnswer(answer);
-  };
-
-  const handleNextQuestion = (answer = selectedAnswer) => {
-    const newAnswers = [...answers, answer];
-    setAnswers(newAnswers);
-    setSelectedAnswer('');
-
-    if (currentQuestionIndex + 1 >= quiz.questions.length) {
-      // Quiz complete
-      handleSubmit(newAnswers);
-    } else {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    }
-  };
-
-  const handleSubmit = async (finalAnswers) => {
-    setIsSubmitting(true);
-    setQuizComplete(true);
-
-    // Calculate score
-    let correctCount = 0;
-    quiz.questions.forEach((question, index) => {
-      const userAnswer = finalAnswers[index] || '';
-      if (userAnswer.toLowerCase().trim() === question.correctAnswer.toLowerCase().trim()) {
-        correctCount++;
-      }
-    });
-
-    const finalScore = Math.round((correctCount / quiz.questions.length) * 100);
-    const passingScore = quiz.settings?.passingScore || 70;
-    const hasPassed = finalScore >= passingScore;
-    
-    setScore(finalScore);
-
-    const timeTaken = Math.round((Date.now() - startTime) / 1000);
-
-    console.log('📊 Quiz results:', { finalScore, passingScore, hasPassed, correctCount, totalQuestions: quiz.questions.length });
-
-    try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      
-      // Try to submit quiz result (only if quiz.id exists and is different from gameId)
-      // Note: Quiz games are stored as games, so quiz submission may not be necessary
-      // But we try it for quizzes that exist in the quizzes collection
-      if (quiz.id && quiz.id !== gameId) {
-        try {
-          const response = await fetch(`${backendUrl}/api/quizzes/${userId}/${quiz.id}/submit`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              answers: finalAnswers,
-              timeTaken,
-              letterId: letterId || null,
-            }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            console.log('✅ Quiz result submitted successfully');
-          } else if (response.status !== 404) {
-            // 404 is expected if quiz is stored as a game, so only warn for other errors
-            console.warn('⚠️ Quiz submission failed (non-critical):', response.status);
-          }
-        } catch (submitError) {
-          console.warn('⚠️ Quiz submission error (non-critical):', submitError);
-          // Continue with game completion even if quiz submission fails
-        }
-      }
-      
-      // Track game completion if it has rewards and user passed (this is more important)
-      if (gameId && quiz.hasReward && hasPassed) {
-        try {
-          const completionResponse = await fetch(`${backendUrl}/api/games/${userId}/${gameId}/complete`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              passed: hasPassed,
-              score: finalScore,
-              message: null, // No message if they didn't pass or claim reward
-            }),
-          });
-          
-          if (completionResponse.ok) {
-            console.log('✅ Game completion tracked successfully');
-          } else {
-            console.warn('⚠️ Failed to track game completion:', completionResponse.status);
-          }
-        } catch (error) {
-          console.error('❌ Error tracking game completion:', error);
-        }
-      }
-      
-      // Always call onComplete to continue the flow
-      if (onComplete) {
-        onComplete({ score: finalScore, passed: hasPassed });
-      }
-    } catch (error) {
-      console.error('❌ Error in quiz submission flow:', error);
-      // Still continue the flow even if there's an error
-      if (onComplete) {
-        onComplete({ score: finalScore, passed: hasPassed });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  }, [currentQuestionIndex, quizComplete, handleNextQuestion, quiz]);
 
   if (!quiz || !quiz.questions) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-gradient-to-br from-purple-900 via-pink-900 to-indigo-900">
-        <p className="text-white text-xl">Loading quiz...</p>
+      <div className="min-h-screen w-full flex items-center justify-center relative overflow-y-auto">
+        <motion.div
+          className="fixed inset-0"
+          animate={{
+            background: [
+              "radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 50%, #1a1a2e 100%)",
+              "radial-gradient(circle at 80% 20%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 50%, #2d1b4e 100%)",
+            ],
+          }}
+          transition={{
+            duration: 8,
+            repeat: Infinity,
+            repeatType: "reverse",
+            ease: "easeInOut",
+          }}
+        />
+        <p className="relative z-10 text-white text-xl font-serif">Loading quiz...</p>
       </div>
     );
   }
@@ -177,7 +179,7 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
   const hasRewards = quiz.hasReward && quiz.rewards && quiz.rewards.length > 0;
 
   // Show reward flow if quiz is complete, passed, and has rewards
-  if (showRewardFlow && hasRewards) {
+  if (nextScreen === 'rewardFlow' && hasRewards) {
     return (
       <RewardFlow
         rewards={quiz.rewards}
@@ -187,29 +189,37 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
         gameType="quiz"
         passed={passed}
         startStep="selection"
+        onRewardSelected={async (rewardId) => {
+          // This is handled by RewardFlow's handleSelectBox, so we don't need to do anything here
+          // The reward is already saved when the box is selected
+          console.log('🎁 Reward selected (already saved by RewardFlow):', rewardId);
+        }}
         onComplete={() => {
-          setShowRewardFlow(false);
-          // Trigger games refresh in parent component
-          if (window.dispatchEvent) {
-            window.dispatchEvent(new CustomEvent('gameCompleted', { detail: { gameId: gameId, gameType: 'quiz' } }));
-          }
+          // Reward flow complete - go back to OptionsPage
+          setNextScreen(null);
           if (onComplete) {
             onComplete({ score, passed });
           }
           if (onBack) onBack();
         }}
-        onBack={() => setShowRewardFlow(false)}
+        onBack={() => {
+          // Go back to completion screen if user clicks back
+          setNextScreen('completionScreen');
+        }}
       />
     );
   }
 
-  // Show GameCompletionScreen if quiz is complete, passed, and has rewards
-  if (quizComplete && passed && hasRewards && !showRewardFlow) {
+  // Show GameCompletionScreen if quiz is complete (handles both passed and failed cases)
+  // Always show completion screen when quiz is complete (nextScreen will be set to 'completionScreen' or null)
+  if (quizComplete && (nextScreen === 'completionScreen' || nextScreen === null)) {
     return (
       <GameCompletionScreen
-        onClaimReward={() => {
-          setShowRewardFlow(true);
-        }}
+        score={score}
+        hasRewards={hasRewards && passed}
+        onClaimReward={hasRewards && passed ? () => {
+          setNextScreen('rewardFlow');
+        } : undefined}
         onMaybeLater={() => {
           if (onComplete) {
             onComplete({ score, passed });
@@ -220,17 +230,17 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
     );
   }
 
-  // Show completion screen without rewards if quiz is complete but no rewards or didn't pass
+  // Fallback completion screen (shouldn't normally be reached, but kept as safety)
   if (quizComplete) {
     return (
-      <div className="h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-purple-900 via-pink-900 to-indigo-900">
-        {/* Animated background */}
+      <div className="min-h-screen w-full flex items-center justify-center relative overflow-y-auto overflow-x-hidden">
+        {/* Background matching OptionsPage */}
         <motion.div
-          className="absolute inset-0"
+          className="fixed inset-0"
           animate={{
             background: [
-              "radial-gradient(circle at 20% 50%, rgba(139, 92, 246, 0.2) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.2) 0%, transparent 50%), linear-gradient(135deg, #581c87 0%, #7c3aed 50%, #a855f7 100%)",
-              "radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(236, 72, 153, 0.2) 0%, transparent 50%), linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)",
+              "radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 50%, #1a1a2e 100%)",
+              "radial-gradient(circle at 80% 20%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 50%, #2d1b4e 100%)",
             ],
           }}
           transition={{
@@ -244,7 +254,7 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 text-center max-w-2xl mx-auto px-4"
+          className="relative z-10 text-center max-w-2xl mx-auto px-4 py-8 md:py-12"
         >
           <motion.div
             initial={{ scale: 0 }}
@@ -263,7 +273,7 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 mb-6"
+            className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 md:p-8 border border-white/20 mb-6"
           >
             <p className="text-white/80 font-serif text-lg mb-2">
               Your Score:
@@ -317,14 +327,14 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
   }
 
   return (
-    <div className="h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-purple-900 via-pink-900 to-indigo-900">
-      {/* Animated background */}
+    <div className="min-h-screen w-full relative overflow-y-auto overflow-x-hidden">
+      {/* Background matching OptionsPage */}
       <motion.div
-        className="absolute inset-0"
+        className="fixed inset-0"
         animate={{
           background: [
-            "radial-gradient(circle at 20% 50%, rgba(139, 92, 246, 0.2) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.2) 0%, transparent 50%), linear-gradient(135deg, #581c87 0%, #7c3aed 50%, #a855f7 100%)",
-            "radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.2) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(236, 72, 153, 0.2) 0%, transparent 50%), linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)",
+            "radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 50%, #1a1a2e 100%)",
+            "radial-gradient(circle at 80% 20%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 20% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 50%, #2d1b4e 100%)",
           ],
         }}
         transition={{
@@ -334,6 +344,64 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
           ease: "easeInOut",
         }}
       />
+
+      {/* Stars Background */}
+      <div className="fixed inset-0 pointer-events-none">
+        {backgroundStars.map((star) => (
+          <motion.div
+            key={star.id}
+            className="absolute bg-white rounded-full"
+            style={{
+              left: `${star.left}%`,
+              top: `${star.top}%`,
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              boxShadow: star.size > 1 ? `0 0 ${star.size * 2}px rgba(255, 255, 255, 0.8)` : 'none',
+            }}
+            animate={{
+              opacity: [0.2, 1, 0.2],
+              scale: [0.8, 1.3, 0.8],
+            }}
+            transition={{
+              duration: star.duration,
+              repeat: Infinity,
+              delay: star.delay,
+              ease: "easeInOut",
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Floating Hearts */}
+      <div className="fixed inset-0 pointer-events-none">
+        {backgroundHearts.map((heart) => (
+          <motion.div
+            key={heart.id}
+            className="absolute text-pink-300/40"
+            style={{
+              left: `${heart.left}%`,
+              top: `${heart.top}%`,
+              fontSize: `${heart.fontSize}px`,
+            }}
+            animate={{
+              y: [0, -30, 0],
+              opacity: [0.3, 0.6, 0.3],
+              rotate: [0, 10, -10, 0],
+            }}
+            transition={{
+              duration: heart.duration,
+              repeat: Infinity,
+              delay: heart.delay,
+              ease: "easeInOut",
+            }}
+          >
+            💕
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Soft Glow Effect */}
+      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-purple-900/10 to-transparent pointer-events-none" />
 
       {/* Back button */}
       {onBack && (
@@ -351,26 +419,26 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
         </motion.button>
       )}
 
-      <div className="relative z-10 w-full max-w-3xl mx-auto px-4">
+      <div className="relative z-10 w-full max-w-3xl mx-auto px-4 py-8 md:py-12">
         {/* Progress and Timer */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
+          className="mb-6 bg-white/10 backdrop-blur-xl rounded-2xl p-4 md:p-6 border border-white/20"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-white/70 font-serif text-sm">
+            <p className="text-white/80 font-serif text-sm md:text-base">
               Question {currentQuestionIndex + 1} of {quiz.questions.length}
             </p>
             <motion.div
               animate={timeRemaining < 10 ? { scale: [1, 1.1, 1] } : {}}
               transition={{ repeat: Infinity, duration: 1 }}
-              className={`text-lg font-serif font-bold ${timeRemaining < 10 ? 'text-red-400' : 'text-white'}`}
+              className={`text-base md:text-lg font-serif font-bold ${timeRemaining < 10 ? 'text-red-400' : 'text-white'}`}
             >
               ⏱️ {timeRemaining}s
             </motion.div>
           </div>
-          <div className="w-full bg-white/10 rounded-full h-2">
+          <div className="w-full bg-white/20 rounded-full h-2">
             <motion.div
               className="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full"
               initial={{ width: 0 }}
@@ -387,9 +455,9 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -50 }}
-            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/20 shadow-xl mb-6"
+            className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 md:p-8 border border-white/20 shadow-xl mb-6"
           >
-            <h2 className="text-2xl md:text-3xl font-serif text-white mb-6">
+            <h2 className="text-xl md:text-2xl lg:text-3xl font-serif text-white mb-4 md:mb-6">
               {currentQuestion.question}
             </h2>
 
@@ -404,11 +472,11 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleAnswerSelect(answer)}
                   className={`
-                    w-full text-left px-6 py-4 rounded-xl font-serif text-lg
+                    w-full text-left px-4 md:px-6 py-3 md:py-4 rounded-xl font-serif text-base md:text-lg
                     transition-all duration-300
                     ${selectedAnswer === answer
                       ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-lg border-2 border-blue-300'
-                      : 'bg-white/10 text-white/90 hover:bg-white/20 border border-white/20'
+                      : 'bg-white/10 backdrop-blur-sm text-white/90 hover:bg-white/20 border border-white/20'
                     }
                   `}
                 >
@@ -427,7 +495,7 @@ export default function LoveQuizPlayer({ quiz, userId, letterId, onComplete, onB
           whileTap={selectedAnswer ? { scale: 0.95 } : {}}
           onClick={() => selectedAnswer && handleNextQuestion()}
           disabled={!selectedAnswer}
-          className="w-full px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full font-serif font-semibold text-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-full font-serif font-semibold text-lg md:text-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {currentQuestionIndex + 1 >= quiz.questions.length ? 'Submit Quiz' : 'Next Question →'}
         </motion.button>

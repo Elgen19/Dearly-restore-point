@@ -1,0 +1,19 @@
+# robots.txt for Dearly
+User-agent: *
+Allow: /
+
+# Disallow private/authenticated routes
+Disallow: /dashboard
+Disallow: /letter/
+Disallow: /verify-email
+Disallow: /welcome
+Disallow: /signin
+Disallow: /signup
+
+# Allow public pages
+Allow: /
+Allow: /landing
+
+# Sitemap location
+Sitemap: https://dearly.app/sitemap.xml
+

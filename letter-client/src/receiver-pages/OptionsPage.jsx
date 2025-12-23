@@ -148,18 +148,29 @@ export default function OptionsPage({ onWriteLetter, onDateInvitation, onViewAll
 
 
   const gamesFetched = useRef(false);
+  const lastUserIdRef = useRef(null);
+  
   useEffect(() => {
     if (isReceiverMode) {
       // Skip games fetch in receiver mode to prevent render loops
       setGames([]);
+      gamesFetched.current = false; // Reset so games can be fetched when not in receiver mode
       return;
     }
+    
+    // If userId changed, reset the fetched flag to allow re-fetching
+    if (userId !== lastUserIdRef.current) {
+      gamesFetched.current = false;
+      lastUserIdRef.current = userId;
+    }
+    
     if (userId && !gamesFetched.current) {
       gamesFetched.current = true;
       fetchGames();
     } else if (!userId) {
       // If no userId, ensure games is empty array
       setGames([]);
+      gamesFetched.current = false;
     }
   }, [userId, isReceiverMode]);
 
@@ -184,6 +195,8 @@ export default function OptionsPage({ onWriteLetter, onDateInvitation, onViewAll
     const handleGameCompleted = () => {
       // Refresh games list when a game is completed
       console.log('🔄 Refreshing games list after completion...');
+      // Reset the fetched flag to allow re-fetching
+      gamesFetched.current = false;
       // Add a small delay to ensure backend has updated
       setTimeout(() => {
         fetchGames();
@@ -191,8 +204,10 @@ export default function OptionsPage({ onWriteLetter, onDateInvitation, onViewAll
     };
 
     const handleRefreshGames = () => {
-      // Refresh games list when requested
+      // Refresh games list when requested (e.g., when games are edited)
       console.log('🔄 Refreshing games list...');
+      // Reset the fetched flag to allow re-fetching
+      gamesFetched.current = false;
       // Add a small delay to ensure backend has updated
       setTimeout(() => {
         fetchGames();
@@ -238,8 +253,14 @@ export default function OptionsPage({ onWriteLetter, onDateInvitation, onViewAll
         console.log('🎮 All games:', games.map(g => ({ id: g.id, type: g.type, isCompleted: g.isCompleted, hasReward: g.hasReward })));
       }
       
-      // First, filter out completed games with rewards
-      const nonCompletedGames = games.filter(g => g && !(g.isCompleted && g.hasReward));
+      // Filter out only games that are actually completed with rewards
+      // Don't hide games just because they have rewards - only hide if they're completed
+      const availableGames = games.filter(g => {
+        if (!g) return false;
+        // Hide only if the game is completed AND has a reward
+        // Games with rewards that aren't completed should still show
+        return !(g.isCompleted && g.hasReward);
+      });
       
       // If there's only one game total and it's completed, return empty array (hide card)
       if (games.length === 1 && games[0] && games[0].isCompleted && games[0].hasReward) {
@@ -247,27 +268,12 @@ export default function OptionsPage({ onWriteLetter, onDateInvitation, onViewAll
         return [];
       }
       
-      // If there are multiple games, hide the game type that was completed
-      if (games.length > 1) {
-        // Find completed game types
-        const completedGameTypes = new Set(
-          games
-            .filter(g => g && g.isCompleted && g.hasReward)
-            .map(g => g.type)
-            .filter(Boolean)
-        );
-        
-        // If a game type is completed, hide all games of that type (even if not completed yet)
-        if (completedGameTypes.size > 0) {
-          console.log('🚫 Hiding game types:', Array.from(completedGameTypes));
-          return nonCompletedGames.filter(g => g && !completedGameTypes.has(g.type));
-        }
+      if (availableGames.length > 0) {
+        console.log('✅ Available games:', availableGames.map(g => ({ id: g.id, type: g.type, isCompleted: g.isCompleted, hasReward: g.hasReward })));
+      } else {
+        console.log('🚫 No available games (all completed or empty)');
       }
-      
-      if (nonCompletedGames.length > 0) {
-        console.log('✅ Available games:', nonCompletedGames.map(g => ({ id: g.id, type: g.type })));
-      }
-      return nonCompletedGames;
+      return availableGames;
     } catch (error) {
       console.error('Error in getAvailableGames:', error);
       return [];

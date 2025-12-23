@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 
-export default function GameCompletionScreen({ onClaimReward, onMaybeLater, score = null }) {
+export default function GameCompletionScreen({ onClaimReward, onMaybeLater, score = null, hasRewards = false }) {
   const [showConfetti, setShowConfetti] = useState(true);
 
   useEffect(() => {
@@ -134,16 +134,18 @@ export default function GameCompletionScreen({ onClaimReward, onMaybeLater, scor
           transition={{ delay: score !== null ? 1.1 : 0.9 }}
           className="text-xl md:text-2xl font-serif text-pink-200 mb-8"
         >
-          {onClaimReward ? 'I\'m so proud of you for completing this! Your effort means everything to me, and I can\'t wait to share something special with you 💝' : 'Congratulations on completing the game! 🎉'}
+          {hasRewards && onClaimReward 
+            ? 'I\'m so proud of you for completing this! Your effort means everything to me, and I can\'t wait to share something special with you 💝'
+            : 'Congratulations on completing the game! You did an amazing job! 🎉💕'}
         </motion.p>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: score !== null ? 1.2 : 1.1 }}
-          className="flex justify-center"
+          className="flex justify-center gap-4"
         >
-          {onClaimReward && (
+          {hasRewards && onClaimReward ? (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -152,6 +154,17 @@ export default function GameCompletionScreen({ onClaimReward, onMaybeLater, scor
             >
               Claim Your Reward 🎁
             </motion.button>
+          ) : (
+            onMaybeLater && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={onMaybeLater}
+                className="px-8 py-4 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full font-serif font-semibold text-lg shadow-lg"
+              >
+                Continue
+              </motion.button>
+            )
           )}
         </motion.div>
       </motion.div>

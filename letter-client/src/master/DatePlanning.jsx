@@ -1,5 +1,5 @@
 // DatePlanning.jsx - Create and manage date invitations (sender view)
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { useAuth } from "../contexts/AuthContext";
 import MessageModal from "../components/MessageModal.jsx";
@@ -524,6 +524,36 @@ export default function DatePlanning({ onBack, fromExtras = false, editInvitatio
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [modal, setModal] = useState({ isOpen: false, message: '', type: 'error' });
   const { currentUser } = useAuth();
+  const hasPushedStateRef = useRef(false);
+
+  // Handle browser back button - call onBack when user presses browser back
+  useEffect(() => {
+    if (!onBack) return; // Don't handle if no onBack handler
+    
+    const handlePopState = (event) => {
+      // Only handle if we've pushed a state
+      if (hasPushedStateRef.current) {
+        // Call our custom back handler
+        onBack();
+        // Push state again to stay on current page
+        hasPushedStateRef.current = false; // Reset flag to allow push
+        window.history.pushState({ datePlanning: true }, '', window.location.href);
+        hasPushedStateRef.current = true;
+      }
+    };
+
+    // Push current state when component mounts so we can detect back button
+    if (!hasPushedStateRef.current) {
+      window.history.pushState({ datePlanning: true }, '', window.location.href);
+      hasPushedStateRef.current = true;
+    }
+    
+    window.addEventListener('popstate', handlePopState);
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onBack]);
 
   useEffect(() => {
     fetchInvitations();
@@ -1082,14 +1112,14 @@ const DatePlanningForm = ({ onBack, onSaved, currentUser, invitation, fromExtras
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-4">
             <motion.button
               type="button"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={onBack}
               disabled={isSubmitting}
-              className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full font-serif font-semibold transition-all disabled:opacity-50 flex items-center gap-2"
+              className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full font-serif font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1101,7 +1131,7 @@ const DatePlanningForm = ({ onBack, onSaved, currentUser, invitation, fromExtras
               whileTap={{ scale: 0.95 }}
               type="submit"
               disabled={isSubmitting}
-              className="px-8 py-3 bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-full font-serif font-semibold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-rose-500 via-pink-500 to-rose-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-full font-serif font-semibold shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <>

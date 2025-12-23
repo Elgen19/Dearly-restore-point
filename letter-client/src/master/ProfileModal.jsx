@@ -58,8 +58,20 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
     try {
       setLoading(true);
       setError(null);
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-      const response = await fetch(`${backendUrl}/api/auth/user/${currentUser.uid}`);
+      // Get Firebase ID token for authentication
+      const idToken = await currentUser.getIdToken();
+      const backendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
+      const response = await fetch(`${backendUrl}/api/auth/user/${currentUser.uid}`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const result = await response.json();
 
       if (result.success) {
@@ -81,10 +93,13 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
       setError(null);
       setSuccess(null);
 
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      // Get Firebase ID token for authentication
+      const idToken = await currentUser.getIdToken();
+      const backendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
       const response = await fetch(`${backendUrl}/api/auth/user/${currentUser.uid}`, {
         method: 'PUT',
         headers: {
+          'Authorization': `Bearer ${idToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -154,11 +169,32 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
     onClose();
   };
 
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        // Restore scroll position when modal closes
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        document.body.style.overflow = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -168,33 +204,44 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         />
 
-        {/* Modal */}
+        {/* Modal - Mobile-friendly sizing */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="relative bg-white rounded-xl md:rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] md:max-h-[90vh] overflow-hidden flex flex-col m-0 md:m-4"
         >
-          {/* Header */}
-          <div className="sticky top-0 bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 p-6 rounded-t-2xl">
+          {/* Header - Mobile-friendly padding */}
+          <div className="sticky top-0 bg-gradient-to-r from-rose-500 via-pink-500 to-purple-500 p-4 md:p-6 rounded-t-xl md:rounded-t-2xl flex-shrink-0 z-10">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-serif font-bold text-white">Profile</h2>
+              <h2 className="text-xl md:text-2xl font-serif font-bold text-white">Profile</h2>
               <button
                 onClick={onClose}
-                className="text-white/90 hover:text-white transition-colors"
+                className="text-white/90 hover:text-white transition-colors p-1 md:p-0"
+                aria-label="Close modal"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
           </div>
 
-          {/* Content */}
-          <div className="p-6 space-y-6 overflow-y-auto flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          {/* Content - Mobile-friendly padding and scrollable */}
+          <div className="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto flex-1" style={{ scrollbarWidth: 'thin', msOverflowStyle: 'none' }}>
             <style>{`
               div::-webkit-scrollbar {
-                display: none;
+                width: 6px;
+              }
+              div::-webkit-scrollbar-track {
+                background: transparent;
+              }
+              div::-webkit-scrollbar-thumb {
+                background: #d1d5db;
+                border-radius: 3px;
+              }
+              div::-webkit-scrollbar-thumb:hover {
+                background: #9ca3af;
               }
             `}</style>
             {/* Messages */}
@@ -223,16 +270,16 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
               </motion.div>
             )}
 
-            {/* User Profile Section */}
-            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-xl p-6 border border-rose-100 shadow-sm">
-              <div className="flex justify-between items-center mb-5">
+            {/* User Profile Section - Mobile-friendly */}
+            <div className="bg-gradient-to-br from-rose-50 to-pink-50 rounded-lg md:rounded-xl p-4 md:p-6 border border-rose-100 shadow-sm">
+              <div className="flex justify-between items-center mb-4 md:mb-5">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-rose-100 rounded-lg">
-                    <svg className="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="p-1.5 md:p-2 bg-rose-100 rounded-lg">
+                    <svg className="w-4 h-4 md:w-5 md:h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <h3 className="text-xl font-serif font-bold text-gray-800">Your Profile</h3>
+                  <h3 className="text-base md:text-xl font-serif font-bold text-gray-800">Your Profile</h3>
                 </div>
                 {!isEditingProfile && (
                   <button
@@ -250,9 +297,9 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
               {loading ? (
                 <div className="text-gray-500">Loading...</div>
               ) : isEditingProfile ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                    <label className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
                       <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
@@ -262,12 +309,12 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       type="text"
                       value={profileForm.firstName}
                       onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent transition-all"
                     />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                      <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <label className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                       Last Name
@@ -276,12 +323,12 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       type="text"
                       value={profileForm.lastName}
                       onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent transition-all"
                     />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                      <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <label className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                       Email
@@ -290,7 +337,7 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       type="email"
                       value={profileForm.email}
                       disabled
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                      className="w-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                     />
                     <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
@@ -299,11 +346,11 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       Email cannot be changed
                     </p>
                   </div>
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex gap-2 md:gap-3 pt-2">
                     <button
                       onClick={handleSaveProfile}
                       disabled={saving}
-                      className="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
+                      className="flex-1 px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-1.5 md:gap-2"
                     >
                       {saving ? (
                         <>
@@ -333,36 +380,36 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                           });
                         }
                       }}
-                      className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 font-medium"
+                      className="px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 font-medium"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-1 p-1.5 bg-white rounded-lg">
-                      <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="space-y-3 md:space-y-4">
+                  <div className="flex items-start gap-2 md:gap-3">
+                    <div className="mt-0.5 md:mt-1 p-1 md:p-1.5 bg-white rounded-lg">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                     </div>
                     <div className="flex-1">
                       <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Name</span>
-                      <p className="text-gray-800 font-semibold text-lg mt-0.5">
+                      <p className="text-gray-800 font-semibold text-base md:text-lg mt-0.5">
                         {userProfile?.firstName || ''} {userProfile?.lastName || ''}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="mt-1 p-1.5 bg-white rounded-lg">
-                      <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-start gap-2 md:gap-3">
+                    <div className="mt-0.5 md:mt-1 p-1 md:p-1.5 bg-white rounded-lg">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                     </div>
                     <div className="flex-1">
                       <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</span>
-                      <p className="text-gray-800 font-semibold text-lg mt-0.5">{userProfile?.email || 'N/A'}</p>
+                      <p className="text-gray-800 font-semibold text-base md:text-lg mt-0.5">{userProfile?.email || 'N/A'}</p>
                       {userProfile?.emailVerified && (
                         <div className="flex items-center gap-2 mt-2">
                           <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">
@@ -379,16 +426,16 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
               )}
             </div>
 
-            {/* Receiver Information Section */}
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border border-purple-100 shadow-sm">
-              <div className="flex justify-between items-center mb-5">
+            {/* Receiver Information Section - Mobile-friendly */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg md:rounded-xl p-4 md:p-6 border border-purple-100 shadow-sm">
+              <div className="flex justify-between items-center mb-4 md:mb-5">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="p-1.5 md:p-2 bg-purple-100 rounded-lg">
+                    <svg className="w-4 h-4 md:w-5 md:h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-xl font-serif font-bold text-gray-800">Receiver Information</h3>
+                  <h3 className="text-base md:text-xl font-serif font-bold text-gray-800">Receiver Information</h3>
                 </div>
                 {!isEditingReceiver && receiverData && (
                   <button
@@ -404,10 +451,10 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
               </div>
 
               {isEditingReceiver ? (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                      <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <label className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
                       Receiver Name
@@ -416,12 +463,12 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       type="text"
                       value={receiverForm.name}
                       onChange={(e) => setReceiverForm({ ...receiverForm, name: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                     />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                      <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <label className="flex items-center gap-1.5 md:gap-2 text-xs md:text-sm font-medium text-gray-700 mb-1.5 md:mb-2">
+                      <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                       Receiver Email
@@ -430,14 +477,14 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                       type="email"
                       value={receiverForm.email}
                       onChange={(e) => setReceiverForm({ ...receiverForm, email: e.target.value })}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                      className="w-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                     />
                   </div>
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex gap-2 md:gap-3 pt-2">
                     <button
                       onClick={handleSaveReceiver}
                       disabled={saving}
-                      className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
+                      className="flex-1 px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-1.5 md:gap-2"
                     >
                       {saving ? (
                         <>
@@ -466,36 +513,36 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
                           });
                         }
                       }}
-                      className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 font-medium"
+                      className="px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-base bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-all duration-200 font-medium"
                     >
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3 md:space-y-4">
                   {receiverData ? (
                     <>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 p-1.5 bg-white rounded-lg">
-                          <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-start gap-2 md:gap-3">
+                        <div className="mt-0.5 md:mt-1 p-1 md:p-1.5 bg-white rounded-lg">
+                          <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                           </svg>
                         </div>
                         <div className="flex-1">
                           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Name</span>
-                          <p className="text-gray-800 font-semibold text-lg mt-0.5">{receiverData.name || 'N/A'}</p>
+                          <p className="text-gray-800 font-semibold text-base md:text-lg mt-0.5">{receiverData.name || 'N/A'}</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3">
-                        <div className="mt-1 p-1.5 bg-white rounded-lg">
-                          <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="flex items-start gap-2 md:gap-3">
+                        <div className="mt-0.5 md:mt-1 p-1 md:p-1.5 bg-white rounded-lg">
+                          <svg className="w-3.5 h-3.5 md:w-4 md:h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                           </svg>
                         </div>
                         <div className="flex-1">
                           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</span>
-                          <p className="text-gray-800 font-semibold text-lg mt-0.5">{receiverData.email || 'N/A'}</p>
+                          <p className="text-gray-800 font-semibold text-base md:text-lg mt-0.5">{receiverData.email || 'N/A'}</p>
                         </div>
                       </div>
                     </>
@@ -512,12 +559,12 @@ export default function ProfileModal({ isOpen, onClose, receiverData, onReceiver
             </div>
 
             {/* Logout Button */}
-            <div className="pt-4 border-t border-gray-200">
+            <div className="pt-3 md:pt-4 border-t border-gray-200">
               <button
                 onClick={handleLogout}
-                className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
+                className="w-full px-3 py-2.5 md:px-4 md:py-3 text-sm md:text-base bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md flex items-center justify-center gap-2"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
                 Logout

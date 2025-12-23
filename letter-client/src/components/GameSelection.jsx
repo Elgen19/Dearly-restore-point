@@ -351,9 +351,13 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
   }, []);
 
   return (
-    <div className="h-screen w-full flex items-start justify-center relative overflow-hidden">
+    <div className="h-screen w-full relative overflow-hidden" style={{ backgroundColor: '#1a1a2e' }}>
+      {/* Background wrapper that extends with content */}
+      <div className="fixed inset-0 bg-[#1a1a2e] z-0" />
+      <div className="fixed inset-0 bg-[#1a1a2e] z-0" />
+      
       <motion.div
-        className="absolute inset-0"
+        className="fixed inset-0 z-0"
         animate={{
           background: [
             "radial-gradient(circle at 20% 50%, rgba(139, 69, 19, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 80%, rgba(75, 0, 130, 0.3) 0%, transparent 50%), linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 50%, #1a1a2e 100%)",
@@ -371,7 +375,7 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
       {stars.map((star) => (
         <motion.div
           key={star.id}
-          className="absolute bg-white rounded-full"
+          className="fixed bg-white rounded-full z-0"
           style={{
             left: `${star.left}%`,
             top: `${star.top}%`,
@@ -395,7 +399,7 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
       {hearts.map((heart) => (
         <motion.div
           key={heart.id}
-          className="absolute text-pink-300/40"
+          className="fixed text-pink-300/40 z-0"
           style={{
             left: `${heart.left}%`,
             top: `${heart.top}%`,
@@ -417,7 +421,10 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
         </motion.div>
       ))}
 
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-900/10 to-transparent pointer-events-none" />
+      <div className="fixed inset-0 bg-gradient-to-b from-transparent via-purple-900/10 to-transparent pointer-events-none z-0" />
+      
+      {/* Content wrapper with scrolling */}
+      <div className="relative z-10 h-full w-full flex items-start justify-center overflow-y-auto">
 
       {/* Header: Back button (left), Title/Icon/Subheader (center), Rewards icon (right) */}
       <div className="absolute top-0 left-0 right-0 z-50 flex items-start justify-between p-4 md:p-6">
@@ -538,7 +545,8 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="relative z-10 text-center max-w-4xl mx-auto px-4 pt-40 md:pt-44"
+        className="relative z-10 text-center max-w-4xl mx-auto px-4 pt-40 md:pt-44 pb-20 md:pb-24 w-full"
+        style={{ position: 'relative', zIndex: 10 }}
       >
 
         {games.length === 0 ? (
@@ -552,32 +560,37 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
             </p>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 max-w-4xl mx-auto w-full px-4">
-            {games.map((game, index) => {
-              const gameIcon = game.type === 'quiz' ? '❓' : '🧠';
-              const gameTypeName = game.type === 'quiz' ? 'Love Quiz' : 'Memory Match';
-              const isCompleted = game.isCompleted && game.hasReward;
-              const isDisabled = isCompleted;
-              
-              return (
-                <motion.button
-                  key={game.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 + index * 0.1 }}
-                  whileHover={!isDisabled ? { scale: 1.05, y: -5 } : {}}
-                  whileTap={!isDisabled ? { scale: 0.95 } : {}}
-                  onClick={() => !isDisabled && onSelectGame(game)}
-                  disabled={isDisabled}
-                  className={`bg-white/10 backdrop-blur-md rounded-2xl p-8 md:p-10 border border-white/20 transition-all text-left relative overflow-hidden group ${
-                    isDisabled 
-                      ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:bg-white/20 cursor-pointer'
-                  }`}
-                >
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 lg:p-10 border border-white/20"
+          >
+            <div className="grid grid-cols-1 gap-6 md:gap-8 w-full">
+              {games.map((game, index) => {
+                const gameIcon = game.type === 'quiz' ? '❓' : game.type === 'word-scramble' ? '🔤' : '🧠';
+                const gameTypeName = game.type === 'quiz' ? 'Love Quiz' : game.type === 'word-scramble' ? 'Word Scramble' : 'Memory Match';
+                const isCompleted = game.isCompleted && game.hasReward;
+                const isDisabled = isCompleted;
+                
+                return (
+                  <motion.button
+                    key={game.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + index * 0.1 }}
+                    whileHover={!isDisabled ? { scale: 1.01 } : {}}
+                    whileTap={!isDisabled ? { scale: 0.99 } : {}}
+                    onClick={() => !isDisabled && onSelectGame(game)}
+                    disabled={isDisabled}
+                    className={`bg-white/5 backdrop-blur-sm rounded-xl p-6 md:p-8 lg:p-10 border border-white/10 transition-all text-left relative overflow-hidden group w-full ${
+                      isDisabled 
+                        ? 'opacity-50 cursor-not-allowed' 
+                        : 'hover:bg-white/10 cursor-pointer'
+                    }`}
+                  >
                   {/* Shimmer effect on hover */}
                   <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"
                     initial={{ x: "-100%" }}
                     whileHover={{ x: "200%" }}
                     transition={{ duration: 0.6 }}
@@ -620,6 +633,8 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
                       <p className="text-white/70 font-serif text-sm md:text-base mb-2 leading-relaxed">
                         {gameTypeName === 'Love Quiz' 
                           ? `Test your knowledge about your relationship with fun questions and see how well you know each other.${game.hasReward ? ' Complete the quiz to earn a reward! 🎁' : ''}`
+                          : gameTypeName === 'Word Scramble'
+                          ? `Unscramble romantic words one by one to reveal a hidden message!${game.hasReward ? ' Complete all words to earn a reward! 🎁' : ''}`
                           : `Match pairs of romantic hearts and emojis!${game.hasReward ? ' Score high to win a prize! 🎁' : ''}`}
                       </p>
                       {isCompleted && (
@@ -632,9 +647,12 @@ export default function GameSelection({ games = [], onSelectGame, onBack, userId
                 </motion.button>
               );
             })}
-          </div>
+            </div>
+          </motion.div>
         )}
       </motion.div>
+      </div>
+      {/* End of content wrapper with scrolling */}
 
       {/* Rewards Modal */}
       <AnimatePresence>

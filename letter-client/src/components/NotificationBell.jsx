@@ -437,6 +437,7 @@ export default function NotificationBell() {
         // Format game type
         const formattedGameType = gameType === 'quiz' ? 'Quiz Game' : 
                                   gameType === 'memory-match' ? 'Memory Match' : 
+                                  gameType === 'word-scramble' ? 'Word Scramble' :
                                   gameType;
         
         return `${receiverName} passed the ${formattedGameType} with a score of ${score}`;
@@ -483,6 +484,7 @@ export default function NotificationBell() {
   const handleBellClick = () => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
+      // Store position for desktop; mobile will use CSS centering
       setDropdownPosition({
         top: rect.bottom + 8,
         right: window.innerWidth - rect.right
@@ -555,10 +557,11 @@ export default function NotificationBell() {
                 initial={{ opacity: 0, y: -10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                className="fixed w-80 md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-[100] max-h-96 overflow-hidden flex flex-col"
+                className="fixed w-80 md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-[100] max-h-96 overflow-hidden flex flex-col left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0"
                 style={{ 
                   top: `${dropdownPosition.top}px`,
-                  right: `${dropdownPosition.right}px`
+                  // Desktop: position from right edge
+                  ...(window.innerWidth >= 768 && { right: `${dropdownPosition.right}px` })
                 }}
               >
                 {/* Header */}

@@ -18,6 +18,13 @@ export default function GameTypeSelection({ onBack, onSelect, availableTypes, is
       description: 'Create a memory matching game with pairs of romantic items',
       color: 'from-purple-500 to-indigo-500',
     },
+    {
+      id: 'word-scramble',
+      name: 'Word Scramble',
+      icon: '🔤',
+      description: 'Unscramble romantic words to reveal a hidden message',
+      color: 'from-rose-500 to-pink-500',
+    },
   ];
 
   // Filter game types based on availableTypes prop

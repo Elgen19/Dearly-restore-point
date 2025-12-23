@@ -21,6 +21,7 @@ import DateInvitation from "./DateInvitation";
 import GameSelection from "../components/GameSelection";
 import MemoryMatch from "../components/MemoryMatch";
 import LoveQuizPlayer from "../components/LoveQuizPlayer";
+import WordScramblePlayer from "../components/WordScramblePlayer";
 import MessageModal from "../components/MessageModal";
 import AccountCreationModal from "../components/AccountCreationModal";
 import ViewWriteBackResponses from "./ViewWriteBackResponses";
@@ -48,9 +49,11 @@ export default function LetterViewer() {
   const [showGameSelection, setShowGameSelection] = useState(false);
   const [showMemoryMatch, setShowMemoryMatch] = useState(false);
   const [showLoveQuiz, setShowLoveQuiz] = useState(false);
+  const [showWordScramble, setShowWordScramble] = useState(false);
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [availableQuizzes, setAvailableQuizzes] = useState([]);
   const [selectedGame, setSelectedGame] = useState(null);
+  const [selectedWordScrambleGame, setSelectedWordScrambleGame] = useState(null);
   const [showMessageModal, setShowMessageModal] = useState(false);
   const [messageModalData, setMessageModalData] = useState({ title: '', message: '', type: 'info' });
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -64,7 +67,20 @@ export default function LetterViewer() {
   const [showAccountModal, setShowAccountModal] = useState(false); // Show account creation modal
   const [fromOptionsPage, setFromOptionsPage] = useState(false); // Track if letter was opened from OptionsPage
   const [hasUserInteracted, setHasUserInteracted] = useState(false); // Track if user has interacted (for autoplay)
+  const [isMobile, setIsMobile] = useState(false); // Track if device is mobile
+  const [loadingStartTime, setLoadingStartTime] = useState(null); // Track when loading started
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0); // Track current loading message
   const { currentUser } = useAuth(); // Get current logged in user
+
+  // Detect mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Restore viewer state from session storage (if available)
   useEffect(() => {
@@ -84,6 +100,7 @@ export default function LetterViewer() {
         if (typeof parsedState.showGameSelection === "boolean") setShowGameSelection(parsedState.showGameSelection);
         if (typeof parsedState.showMemoryMatch === "boolean") setShowMemoryMatch(parsedState.showMemoryMatch);
         if (typeof parsedState.showLoveQuiz === "boolean") setShowLoveQuiz(parsedState.showLoveQuiz);
+        if (typeof parsedState.showWordScramble === "boolean") setShowWordScramble(parsedState.showWordScramble);
       }
     } catch (error) {
       console.error("❌ Error restoring viewer state:", error);
@@ -108,12 +125,13 @@ export default function LetterViewer() {
         showGameSelection,
         showMemoryMatch,
         showLoveQuiz,
+        showWordScramble,
       };
       sessionStorage.setItem(`${VIEWER_STATE_KEY_PREFIX}${token}`, JSON.stringify(stateToPersist));
     } catch (error) {
       console.error("❌ Error saving viewer state:", error);
     }
-  }, [token, stage, showOptionsPage, showWritingInterface, showViewWriteBackResponses, showPDFDownload, showViewAllLetters, showVoiceMessage, showDateInvitation, showGameSelection, showMemoryMatch, showLoveQuiz]);
+  }, [token, stage, showOptionsPage, showWritingInterface, showViewWriteBackResponses, showPDFDownload, showViewAllLetters, showVoiceMessage, showDateInvitation, showGameSelection, showMemoryMatch, showLoveQuiz, showWordScramble]);
 
   // Fetch available quizzes when userId is available
   useEffect(() => {
@@ -332,11 +350,14 @@ export default function LetterViewer() {
         
         // Create notification when user reaches security page (if letter has security)
         // Only create once per session to prevent duplicate notifications on refresh
-        if (letterData.securityType && !isPreview && actualUserId) {
-          const notificationKey = `security_notified_${actualLetterId}`;
+        // Also check localStorage (persists across sessions) and use a more robust key
+        if (letterData.securityType && !isPreview && actualUserId && actualLetterId) {
+          const notificationKey = `security_notified_${actualUserId}_${actualLetterId}`;
           const hasNotifiedThisSession = sessionStorage.getItem(notificationKey);
+          const hasNotifiedEver = localStorage.getItem(notificationKey);
           
-          if (!hasNotifiedThisSession) {
+          // Only create notification if we haven't notified for this letter+user combo
+          if (!hasNotifiedThisSession && !hasNotifiedEver) {
             try {
               const notificationResponse = await fetch(`${backendUrl}/api/notifications/${actualUserId}/create`, {
                 method: 'POST',
@@ -353,11 +374,15 @@ export default function LetterViewer() {
               });
               if (notificationResponse.ok) {
                 console.log('✅ Notification created for security page access');
-                sessionStorage.setItem(notificationKey, 'true'); // Mark as created to prevent duplicates
+                // Mark as created in both sessionStorage and localStorage to prevent duplicates
+                sessionStorage.setItem(notificationKey, 'true');
+                localStorage.setItem(notificationKey, 'true');
               }
             } catch (err) {
               console.error('Error creating security access notification:', err);
             }
+          } else {
+            console.log('⏭️ Skipping duplicate security notification (already notified for this letter)');
           }
         }
         
@@ -775,6 +800,54 @@ export default function LetterViewer() {
     setShowOptionsPage(true);
   };
 
+  // Auto-advance on mobile for introductory and closing stages (3 seconds)
+  useEffect(() => {
+    if (!isMobile || !letter) return; // Only on mobile and when letter is loaded
+    
+    let timeoutId;
+    
+    // Handle normal path: stage is 'introductory' or 'closing'
+    if (stage === 'introductory') {
+      // Wait 3 seconds after component mounts/animations, then advance
+      timeoutId = setTimeout(() => {
+        setStage('mainBody');
+      }, 3000);
+    } else if (stage === 'closing') {
+      // Wait for closing content to be visible (content appears quickly, button appears after 4s)
+      // Add 3 seconds viewing time after content is visible (using 4s to ensure content is ready + 3s viewing = 7s)
+      timeoutId = setTimeout(() => {
+        // Show reaction modal first (only if not already submitted, or if in preview mode)
+        if (!hasSubmittedReaction || isPreviewMode) {
+          setShowReactionModal(true);
+        } else {
+          // If already submitted and not in preview mode, go directly to complete
+          setStage('complete');
+        }
+      }, 4000 + 3000); // 4 seconds to ensure content/animations are ready + 3 seconds viewing time
+    }
+    // Handle no-security path: stage is 'security' but showing introductory/closing
+    else if (stage === 'security' && !letter.securityType) {
+      if (letter.introductory) {
+        // Has introductory in no-security path, auto-advance to mainBody
+        timeoutId = setTimeout(() => {
+          setStage('mainBody');
+        }, 3000);
+      } else if (letter.closing && !letter.introductory && !letter.mainBody) {
+        // Only closing in no-security path, auto-advance to complete
+        timeoutId = setTimeout(() => {
+          if (!hasSubmittedReaction || isPreviewMode) {
+            setShowReactionModal(true);
+          } else {
+            setStage('complete');
+          }
+        }, 3000);
+      }
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [stage, isMobile, hasSubmittedReaction, isPreviewMode, letter]);
 
   // Map styles to components
   const introductoryComponents = {
@@ -794,8 +867,76 @@ export default function LetterViewer() {
     3: ClosingPreviewV3,
   };
 
+  // Romantic loading messages that explain the wait
+  const romanticMessages = [
+    {
+      text: "Preparing your letter with care...",
+      subtext: "Every word is being carefully arranged just for you",
+      emoji: "💌"
+    },
+    {
+      text: "The stars are aligning your message...",
+      subtext: "Sometimes the most beautiful things take a moment",
+      emoji: "✨"
+    },
+    {
+      text: "Gathering all the love and warmth...",
+      subtext: "Your letter is being wrapped in tenderness",
+      emoji: "🌙"
+    },
+    {
+      text: "Almost there, darling...",
+      subtext: "Patience is a gift, and so is what awaits you",
+      emoji: "💕"
+    },
+    {
+      text: "The universe is delivering your message...",
+      subtext: "Good things come to those who wait with an open heart",
+      emoji: "🌟"
+    },
+    {
+      text: "Your letter is on its way...",
+      subtext: "Like a gentle breeze, it's making its journey to you",
+      emoji: "🌸"
+    }
+  ];
+
+  // Track loading start time
+  useEffect(() => {
+    if (isLoading && !loadingStartTime) {
+      setLoadingStartTime(Date.now());
+    } else if (!isLoading) {
+      setLoadingStartTime(null);
+      setLoadingMessageIndex(0);
+    }
+  }, [isLoading, loadingStartTime]);
+
+  // Rotate loading messages every 8 seconds
+  useEffect(() => {
+    if (!isLoading) return;
+    
+    const messageInterval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % romanticMessages.length);
+    }, 8000);
+
+    return () => clearInterval(messageInterval);
+  }, [isLoading, romanticMessages.length]);
+
+  // Calculate estimated progress (for visual feedback)
+  const getLoadingProgress = () => {
+    if (!loadingStartTime) return 0;
+    const elapsed = Date.now() - loadingStartTime;
+    // Estimate: 60 seconds max, but cap at 95% until actually loaded
+    const estimatedMax = 60000; // 60 seconds
+    const progress = Math.min((elapsed / estimatedMax) * 95, 95);
+    return progress;
+  };
+
   // Loading state
   if (isLoading) {
+    const currentMessage = romanticMessages[loadingMessageIndex];
+    const progress = getLoadingProgress();
+    
     return (
       <div className="h-screen w-full relative overflow-hidden flex items-center justify-center">
         {/* Animated Background */}
@@ -814,15 +955,138 @@ export default function LetterViewer() {
             ease: "easeInOut",
           }}
         />
-        <div className="relative z-10 text-center">
+        
+        {/* Floating Hearts Animation */}
+        {typeof window !== 'undefined' && [...Array(8)].map((_, i) => {
+          const startX = Math.random() * 100;
+          const startY = 100 + Math.random() * 20;
+          return (
+            <motion.div
+              key={i}
+              className="absolute text-2xl opacity-20"
+              initial={{
+                x: `${startX}%`,
+                y: `${startY}%`,
+                rotate: 0,
+              }}
+              animate={{
+                y: '-10%',
+                rotate: 360,
+                x: `${Math.random() * 100}%`,
+              }}
+              transition={{
+                duration: 15 + Math.random() * 10,
+                repeat: Infinity,
+                delay: Math.random() * 5,
+                ease: "linear",
+              }}
+            >
+              💖
+            </motion.div>
+          );
+        })}
+
+        {/* Sparkles */}
+        {typeof window !== 'undefined' && [...Array(12)].map((_, i) => {
+          const startX = Math.random() * 100;
+          const startY = Math.random() * 100;
+          return (
+            <motion.div
+              key={`sparkle-${i}`}
+              className="absolute text-lg opacity-30"
+              initial={{
+                x: `${startX}%`,
+                y: `${startY}%`,
+                scale: 0,
+              }}
+              animate={{
+                scale: [0, 1, 0],
+                rotate: [0, 180, 360],
+              }}
+              transition={{
+                duration: 2 + Math.random() * 2,
+                repeat: Infinity,
+                delay: Math.random() * 3,
+                ease: "easeInOut",
+              }}
+            >
+              ✨
+            </motion.div>
+          );
+        })}
+
+        <div className="relative z-10 text-center px-4 max-w-2xl">
+          {/* Main Envelope Animation */}
           <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="text-6xl mb-4"
+            animate={{ 
+              rotate: [0, 5, -5, 0],
+              scale: [1, 1.1, 1],
+            }}
+            transition={{ 
+              duration: 3,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            className="text-7xl mb-6"
           >
-            💌
+            {currentMessage.emoji}
           </motion.div>
-          <p className="text-white font-serif text-xl">Loading your letter...</p>
+
+          {/* Main Message */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={loadingMessageIndex}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.5 }}
+              className="mb-4"
+            >
+              <p className="text-white font-serif text-2xl md:text-3xl mb-3">
+                {currentMessage.text}
+              </p>
+              <p className="text-white/70 font-serif text-base md:text-lg italic">
+                {currentMessage.subtext}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Progress Bar */}
+          <div className="mt-8 mb-4">
+            <div className="w-full max-w-md mx-auto h-1 bg-white/20 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-pink-400 via-rose-400 to-pink-500 rounded-full"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ 
+                  duration: 1,
+                  ease: "easeOut"
+                }}
+              />
+            </div>
+            <motion.p
+              key={Math.floor(progress / 20)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-white/50 font-serif text-sm mt-2"
+            >
+              {progress < 30 ? "Taking a gentle breath..." :
+               progress < 60 ? "Almost ready..." :
+               "Just a moment more..."}
+            </motion.p>
+          </div>
+
+          {/* Reassuring Note */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 2 }}
+            className="mt-8"
+          >
+            <p className="text-white/40 font-serif text-xs md:text-sm italic">
+              Your letter is worth the wait 💕
+            </p>
+          </motion.div>
         </div>
       </div>
     );
@@ -1071,22 +1335,24 @@ export default function LetterViewer() {
                 receiverName={letter.receiverName || ""}
                 userFirstName={letter.receiverName ? letter.receiverName.split(' ')[0] : ""}
               />
-              {/* Continue Button */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 2 }}
-                className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-20 w-full md:w-auto px-4 md:px-0 flex justify-center md:justify-end"
-              >
-                <motion.button
-                  onClick={handleSectionComplete}
-                  className="px-6 md:px-8 py-2.5 md:py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-base md:text-lg hover:bg-pink-500/30 transition-all"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+              {/* Continue Button - Hidden on mobile, auto-advance after 3 seconds */}
+              {!isMobile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 2 }}
+                  className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-20 w-full md:w-auto px-4 md:px-0 flex justify-center md:justify-end"
                 >
-                  Continue →
-                </motion.button>
-              </motion.div>
+                  <motion.button
+                    onClick={handleSectionComplete}
+                    className="px-6 md:px-8 py-2.5 md:py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-base md:text-lg hover:bg-pink-500/30 transition-all"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Continue →
+                  </motion.button>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
@@ -1137,22 +1403,24 @@ export default function LetterViewer() {
                 closing={letter.closing}
                 receiverName={letter.receiverName || ""}
               />
-              {/* Continue Button */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 4 }}
-                className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-20 w-full md:w-auto px-4 md:px-0 flex justify-center md:justify-end"
-              >
-                <motion.button
-                  onClick={handleSectionComplete}
-                  className="px-6 md:px-8 py-2.5 md:py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-base md:text-lg hover:bg-pink-500/30 transition-all"
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+              {/* Continue Button - Hidden on mobile, auto-advance after 3 seconds */}
+              {!isMobile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 4 }}
+                  className="absolute bottom-4 md:bottom-8 left-1/2 -translate-x-1/2 md:left-auto md:translate-x-0 md:right-8 z-20 w-full md:w-auto px-4 md:px-0 flex justify-center md:justify-end"
                 >
-                  Continue →
-                </motion.button>
-              </motion.div>
+                  <motion.button
+                    onClick={handleSectionComplete}
+                    className="px-6 md:px-8 py-2.5 md:py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-base md:text-lg hover:bg-pink-500/30 transition-all"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Continue →
+                  </motion.button>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
@@ -1244,7 +1512,7 @@ export default function LetterViewer() {
           )}
 
           {/* Game Selection */}
-          {showGameSelection && !showMemoryMatch && !showLoveQuiz && (
+          {showGameSelection && !showMemoryMatch && !showLoveQuiz && !showWordScramble && (
             <motion.div
               key="gameSelection"
               initial={{ opacity: 0 }}
@@ -1254,26 +1522,44 @@ export default function LetterViewer() {
             >
               <GameSelection
                 userId={userId}
-                onSelectGame={(gameId) => {
-                  setSelectedGame(gameId);
-                  setShowGameSelection(false);
-                  if (gameId === 'memory-match') {
-                    setShowMemoryMatch(true);
-                  } else if (gameId === 'love-quiz') {
-                    if (availableQuizzes.length === 0) {
-                      setMessageModalData({
-                        title: 'No Quizzes Available',
-                        message: 'No quizzes available. Please ask your loved one to create one!',
-                        type: 'info',
-                      });
-                      setShowMessageModal(true);
-                      setShowGameSelection(true);
-                    } else {
-                      // Randomly select a quiz from available quizzes
-                      const randomIndex = Math.floor(Math.random() * availableQuizzes.length);
-                      const randomQuiz = availableQuizzes[randomIndex];
-                      setSelectedQuiz(randomQuiz);
+                onSelectGame={(game) => {
+                  if (game && game.id) {
+                    // Directly start the game if a game object is provided
+                    if (game.type === 'quiz') {
+                      setSelectedQuiz(game);
                       setShowLoveQuiz(true);
+                      setShowGameSelection(false);
+                    } else if (game.type === 'memory-match') {
+                      setSelectedGame(game);
+                      setShowMemoryMatch(true);
+                      setShowGameSelection(false);
+                    } else if (game.type === 'word-scramble') {
+                      setSelectedWordScrambleGame(game);
+                      setShowWordScramble(true);
+                      setShowGameSelection(false);
+                    }
+                  } else {
+                    // Fallback to old behavior for string IDs
+                    setSelectedGame(game);
+                    setShowGameSelection(false);
+                    if (game === 'memory-match') {
+                      setShowMemoryMatch(true);
+                    } else if (game === 'love-quiz') {
+                      if (availableQuizzes.length === 0) {
+                        setMessageModalData({
+                          title: 'No Quizzes Available',
+                          message: 'No quizzes available. Please ask your loved one to create one!',
+                          type: 'info',
+                        });
+                        setShowMessageModal(true);
+                        setShowGameSelection(true);
+                      } else {
+                        // Randomly select a quiz from available quizzes
+                        const randomIndex = Math.floor(Math.random() * availableQuizzes.length);
+                        const randomQuiz = availableQuizzes[randomIndex];
+                        setSelectedQuiz(randomQuiz);
+                        setShowLoveQuiz(true);
+                      }
                     }
                   }
                 }}
@@ -1359,6 +1645,43 @@ export default function LetterViewer() {
             </motion.div>
           )}
 
+          {/* Word Scramble Player */}
+          {showWordScramble && selectedWordScrambleGame && (
+            <motion.div
+              key="wordScramble"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full w-full absolute inset-0 z-40"
+            >
+              <WordScramblePlayer
+                game={selectedWordScrambleGame}
+                userId={userId}
+                letterId={letterId}
+                gameId={selectedWordScrambleGame?.id}
+                onBack={() => {
+                  setShowWordScramble(false);
+                  setShowOptionsPage(true);
+                  // Trigger games refresh with delay to ensure backend has updated
+                  setTimeout(() => {
+                    if (window.dispatchEvent) {
+                      window.dispatchEvent(new CustomEvent('refreshGames'));
+                    }
+                  }, 1000);
+                }}
+                onComplete={(result) => {
+                  console.log('Word Scramble completed:', result);
+                  // Trigger games refresh with delay to ensure backend has updated
+                  setTimeout(() => {
+                    if (window.dispatchEvent) {
+                      window.dispatchEvent(new CustomEvent('refreshGames'));
+                    }
+                  }, 1000);
+                }}
+              />
+            </motion.div>
+          )}
+
           {/* View Write Back Responses */}
           {showViewWriteBackResponses && letter && (letter.userId || userId) && (
             <motion.div
@@ -1401,7 +1724,7 @@ export default function LetterViewer() {
           )}
 
           {/* Options Page */}
-          {showOptionsPage && !showWritingInterface && !showViewWriteBackResponses && !showPDFDownload && !showViewAllLetters && !showVoiceMessage && !showDateInvitation && !showGameSelection && !showMemoryMatch && (
+          {showOptionsPage && !showWritingInterface && !showViewWriteBackResponses && !showPDFDownload && !showViewAllLetters && !showVoiceMessage && !showDateInvitation && !showGameSelection && !showMemoryMatch && !showLoveQuiz && !showWordScramble && (
             <motion.div
               key="optionsPage"
               initial={{ opacity: 0 }}
@@ -1438,6 +1761,9 @@ export default function LetterViewer() {
                     } else if (game.type === 'memory-match') {
                       setSelectedGame(game);
                       setShowMemoryMatch(true);
+                    } else if (game.type === 'word-scramble') {
+                      setSelectedWordScrambleGame(game);
+                      setShowWordScramble(true);
                     }
                   } else {
                     // Fallback to game selection if no game provided
@@ -1460,34 +1786,34 @@ export default function LetterViewer() {
           )}
 
           {/* Complete Stage */}
-          {stage === 'complete' && !showOptionsPage && !showWritingInterface && !showViewWriteBackResponses && !showPDFDownload && !showViewAllLetters && !showVoiceMessage && !showDateInvitation && !showGameSelection && !showMemoryMatch && !showLoveQuiz && (
+          {stage === 'complete' && !showOptionsPage && !showWritingInterface && !showViewWriteBackResponses && !showPDFDownload && !showViewAllLetters && !showVoiceMessage && !showDateInvitation && !showGameSelection && !showMemoryMatch && !showLoveQuiz && !showWordScramble && (
             <motion.div
               key="complete"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="h-full w-full flex items-center justify-center p-4"
+              className="h-full w-full flex items-center justify-center p-2 sm:p-4 overflow-y-auto"
             >
-              <div className="text-center max-w-2xl mx-auto">
+              <div className="text-center max-w-2xl mx-auto py-2 sm:py-4">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                  className="text-6xl mb-6"
+                  className="text-4xl sm:text-6xl mb-3 sm:mb-6"
                 >
                   💌
                 </motion.div>
-                <h2 className="text-3xl font-serif text-white mb-4">
+                <h2 className="text-xl sm:text-3xl font-serif text-white mb-2 sm:mb-4 px-2">
                   You've reached the end
                 </h2>
-                <p className="text-gray-300 font-serif text-lg mb-4">
+                <p className="text-gray-300 font-serif text-sm sm:text-lg mb-2 sm:mb-4 px-2">
                   Thank you for reading this letter with your heart.
                 </p>
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
-                  className="text-pink-200 font-serif text-base md:text-lg italic mb-8"
+                  className="text-pink-200 font-serif text-xs sm:text-base md:text-lg italic mb-4 sm:mb-8 px-2"
                 >
                   Explore the dashboard to discover more heartfelt experiences and connect in beautiful ways.
                 </motion.p>
@@ -1497,14 +1823,14 @@ export default function LetterViewer() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5 }}
-                  className="flex flex-col sm:flex-row gap-4 justify-center items-center"
+                  className="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center items-center px-2"
                 >
                   {/* Replay Button */}
                   <motion.button
                     whileHover={{ scale: 1.05, boxShadow: "0 10px 30px rgba(236, 72, 153, 0.4)" }}
                     whileTap={{ scale: 0.95 }}
                     onClick={handleReplay}
-                    className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-lg shadow-lg overflow-hidden group"
+                    className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-sm sm:text-lg shadow-lg overflow-hidden group"
                   >
                     <span className="relative z-10 flex items-center gap-2 justify-center">
                       <motion.span
@@ -1523,7 +1849,7 @@ export default function LetterViewer() {
                       whileHover={{ scale: 1.05, boxShadow: "0 10px 30px rgba(139, 92, 246, 0.4)" }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleContinueToDashboard}
-                      className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 text-white rounded-full font-serif text-lg shadow-lg hover:shadow-xl transition-all"
+                      className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-500 text-white rounded-full font-serif text-sm sm:text-lg shadow-lg hover:shadow-xl transition-all"
                     >
                       Continue to Dashboard
                     </motion.button>
@@ -1538,7 +1864,7 @@ export default function LetterViewer() {
                       whileHover={{ scale: 1.05, boxShadow: "0 10px 30px rgba(34, 197, 94, 0.4)" }}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => setShowAccountModal(true)}
-                      className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-green-500 via-emerald-500 to-green-500 text-white rounded-full font-serif text-lg shadow-lg hover:shadow-xl transition-all"
+                      className="w-full sm:w-auto px-6 sm:px-8 py-2 sm:py-3 bg-gradient-to-r from-green-500 via-emerald-500 to-green-500 text-white rounded-full font-serif text-sm sm:text-lg shadow-lg hover:shadow-xl transition-all"
                     >
                       <span className="flex items-center gap-2">
                         ✨ Create Account
@@ -1553,7 +1879,7 @@ export default function LetterViewer() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.7 }}
-                    className="text-gray-400 font-serif text-sm mt-4"
+                    className="text-gray-400 font-serif text-xs sm:text-sm mt-2 sm:mt-4 px-2"
                   >
                     Create a free account to save this letter and write back easily 💌
                   </motion.p>
@@ -1666,21 +1992,24 @@ export default function LetterViewer() {
                     receiverName={letter.receiverName || ""}
                     userFirstName={letter.receiverName ? letter.receiverName.split(' ')[0] : ""}
                   />
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 2 }}
-                    className="absolute bottom-8 right-8 z-20"
-                  >
-                    <motion.button
-                      onClick={() => setStage('mainBody')}
-                      className="px-8 py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-lg hover:bg-pink-500/30 transition-all"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                  {/* Continue Button - Hidden on mobile, auto-advance after 3 seconds */}
+                  {!isMobile && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 2 }}
+                      className="absolute bottom-8 right-8 z-20"
                     >
-                      Continue →
-                    </motion.button>
-                  </motion.div>
+                      <motion.button
+                        onClick={() => setStage('mainBody')}
+                        className="px-8 py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-lg hover:bg-pink-500/30 transition-all"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        Continue →
+                      </motion.button>
+                    </motion.div>
+                  )}
                 </>
               ) : letter.mainBody ? (
                 <>
@@ -1712,21 +2041,24 @@ export default function LetterViewer() {
                     closing={letter.closing}
                     receiverName={letter.receiverName || ""}
                   />
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 2 }}
-                    className="absolute bottom-8 right-8 z-20"
-                  >
-                    <motion.button
-                      onClick={() => setStage('complete')}
-                      className="px-8 py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-lg hover:bg-pink-500/30 transition-all"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                  {/* Continue Button - Hidden on mobile, auto-advance after 3 seconds */}
+                  {!isMobile && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 2 }}
+                      className="absolute bottom-8 right-8 z-20"
                     >
-                      Continue →
-                    </motion.button>
-                  </motion.div>
+                      <motion.button
+                        onClick={() => setStage('complete')}
+                        className="px-8 py-3 bg-pink-500/20 backdrop-blur-md border border-pink-300/30 rounded-full text-white font-serif text-lg hover:bg-pink-500/30 transition-all"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        Continue →
+                      </motion.button>
+                    </motion.div>
+                  )}
                 </>
               ) : null}
             </motion.div>

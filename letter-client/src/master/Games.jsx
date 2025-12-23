@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import GameCreationFlow from './GameCreationFlow';
 import LoveQuizCreator from './LoveQuizCreator';
+import WordScrambleCreator from './WordScrambleCreator';
 import RewardSetup from './RewardSetup';
 import GameTypeSelection from './GameTypeSelection';
 import MessageModal from '../components/MessageModal.jsx';
@@ -16,6 +17,7 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
   const [showCreateFlow, setShowCreateFlow] = useState(false);
   const [managingGame, setManagingGame] = useState(null);
   const [editingQuizGame, setEditingQuizGame] = useState(null);
+  const [editingWordScrambleGame, setEditingWordScrambleGame] = useState(null);
   const [editingRewardsGame, setEditingRewardsGame] = useState(null);
   const [showGameTypeSelection, setShowGameTypeSelection] = useState(false);
   const [selectedGameType, setSelectedGameType] = useState(null);
@@ -229,6 +231,10 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
     if (result.success) {
       setEditingRewardsGame(null);
       fetchGames();
+      // Dispatch event to refresh games in OptionsPage
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('refreshGames'));
+      }
     } else {
       setModal({
         isOpen: true,
@@ -247,10 +253,36 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
     if (result.success) {
       setEditingQuizGame(null);
       fetchGames();
+      // Dispatch event to refresh games in OptionsPage
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('refreshGames'));
+      }
     } else {
       setModal({
         isOpen: true,
         message: result.error || 'Failed to update quiz',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleWordScrambleUpdated = async (game, scrambleData) => {
+    const result = await saveGameChanges(game.id, {
+      title: scrambleData.title,
+      words: scrambleData.words,
+      settings: scrambleData.settings,
+    });
+    if (result.success) {
+      setEditingWordScrambleGame(null);
+      fetchGames();
+      // Dispatch event to refresh games in OptionsPage
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('refreshGames'));
+      }
+    } else {
+      setModal({
+        isOpen: true,
+        message: result.error || 'Failed to update word scramble',
         type: 'error',
       });
     }
@@ -272,6 +304,21 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
     );
   }
 
+  if (editingWordScrambleGame) {
+    return (
+      <WordScrambleCreator
+        onBack={() => setEditingWordScrambleGame(null)}
+        gameToEdit={{
+          id: editingWordScrambleGame.id,
+          title: editingWordScrambleGame.title,
+          words: editingWordScrambleGame.words || [],
+          settings: editingWordScrambleGame.settings || {},
+        }}
+        onSaved={(scrambleData) => handleWordScrambleUpdated(editingWordScrambleGame, scrambleData)}
+      />
+    );
+  }
+
   if (editingRewardsGame) {
     return (
       <RewardSetup
@@ -284,7 +331,7 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
   }
 
   // If fromExtras, show game creation flow (which starts with game type selection)
-  if (fromExtras && !showGameTypeSelection && !showCreateFlow && !managingGame && !editingQuizGame && !editingRewardsGame) {
+  if (fromExtras && !showGameTypeSelection && !showCreateFlow && !managingGame && !editingQuizGame && !editingWordScrambleGame && !editingRewardsGame) {
     return (
       <GameCreationFlow
         onBack={() => {
@@ -302,7 +349,7 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
 
   if (showGameTypeSelection) {
     // Filter out the current game type - only show the other type
-    const allTypes = ['quiz', 'memory-match'];
+    const allTypes = ['quiz', 'memory-match', 'word-scramble'];
     const availableTypes = allTypes.filter(type => type !== currentGameType);
 
     if (availableTypes.length === 0) {
@@ -783,7 +830,7 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
                 >
                   <div className="flex items-start justify-between">
                     <div className="text-3xl md:text-4xl">
-                      {game.type === 'quiz' ? '❓' : '🧠'}
+                      {game.type === 'quiz' ? '❓' : game.type === 'word-scramble' ? '🔤' : '🧠'}
                     </div>
                     {game.hasReward && (
                       <span className="bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
@@ -798,7 +845,7 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
                       {game.title || game.name}
                     </h3>
                     <p className="text-gray-600 font-serif text-xs md:text-sm">
-                      Type: {game.type === 'quiz' ? 'Quiz Game' : 'Memory Match'}
+                      Type: {game.type === 'quiz' ? 'Quiz Game' : game.type === 'word-scramble' ? 'Word Scramble' : 'Memory Match'}
                     </p>
                     {game.hasReward ? (
                       <p className="text-pink-600 font-serif text-xs md:text-sm mt-2 flex items-center gap-2">
@@ -844,10 +891,21 @@ export default function Games({ onBack, gameToEdit = null, fromExtras = false })
             game={managingGame}
             onClose={() => setManagingGame(null)}
             onEditGame={() => {
-              setCurrentGameType(managingGame.type); // Store the current game type
-              setGameToReplace(managingGame); // Store the game being replaced
+              // Edit content based on game type
+              if (managingGame.type === 'quiz') {
+                setEditingQuizGame(managingGame);
+              } else if (managingGame.type === 'word-scramble') {
+                setEditingWordScrambleGame(managingGame);
+              } else if (managingGame.type === 'memory-match') {
+                // Memory match doesn't have editable content, show message
+                setModal({
+                  isOpen: true,
+                  message: 'Memory Match games don\'t have editable content. You can only add or edit rewards.',
+                  type: 'info',
+                });
+                return;
+              }
               setManagingGame(null);
-              setShowGameTypeSelection(true);
             }}
             onEditQuiz={() => {
               setEditingQuizGame(managingGame);
@@ -1450,7 +1508,7 @@ function GameSelectionScreen({ games, gameType, onSelectGame, onBack }) {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {(fromExtras ? games.filter(game => game.letterId) : games).map((game, index) => {
-                const gameIcon = game.type === 'quiz' ? '❓' : '🧠';
+                const gameIcon = game.type === 'quiz' ? '❓' : game.type === 'word-scramble' ? '🔤' : '🧠';
                 return (
                   <motion.div
                     key={game.id}
@@ -1480,7 +1538,7 @@ function GameSelectionScreen({ games, gameType, onSelectGame, onBack }) {
                           {game.title || game.name}
                         </h3>
                         <p className="text-gray-600 font-serif text-sm">
-                          Type: {game.type === 'quiz' ? 'Quiz Game' : 'Memory Match'}
+                          Type: {game.type === 'quiz' ? 'Quiz Game' : game.type === 'word-scramble' ? 'Word Scramble' : 'Memory Match'}
                         </p>
                         {game.hasReward ? (
                           <p className="text-pink-600 font-serif text-sm mt-2 flex items-center gap-2">
@@ -1567,13 +1625,13 @@ function GameDetailsModal({ game, onClose, onEditGame, onEditQuiz, onEditRewards
               transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
               className="text-4xl md:text-6xl mb-2 md:mb-3"
             >
-              {game.type === 'quiz' ? '❓' : '🧠'}
+              {game.type === 'quiz' ? '❓' : game.type === 'word-scramble' ? '🔤' : '🧠'}
             </motion.div>
             <h3 className="text-xl md:text-2xl lg:text-3xl font-serif font-bold text-gray-800 mb-1 md:mb-2 px-2">
               {game.title || 'Untitled Game'}
             </h3>
             <p className="text-gray-500 font-serif text-xs md:text-sm lg:text-base">
-              {game.type === 'quiz' ? 'Quiz Game' : 'Memory Match'}
+              {game.type === 'quiz' ? 'Quiz Game' : game.type === 'word-scramble' ? 'Word Scramble' : 'Memory Match'}
             </p>
             {game.isCompleted && (
               <motion.p
@@ -1636,15 +1694,32 @@ function GameDetailsModal({ game, onClose, onEditGame, onEditQuiz, onEditRewards
 
         {/* Footer with action buttons */}
         <div className="px-4 md:px-8 py-4 md:py-6 border-t border-gray-100 bg-gray-50 space-y-2 md:space-y-3">
-          {/* Primary Edit Button - Opens game selection */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={onEditGame}
-            className="w-full px-4 md:px-6 py-3 md:py-4 text-sm md:text-base bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full font-serif font-semibold shadow-lg transition-all"
-          >
-            ✏️ Edit Game
-          </motion.button>
+          {/* Primary Edit Button - Edit content based on game type */}
+          {game.type === 'quiz' && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onEditQuiz}
+              className="w-full px-4 md:px-6 py-3 md:py-4 text-sm md:text-base bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full font-serif font-semibold shadow-lg transition-all"
+            >
+              ✏️ Edit Quiz
+            </motion.button>
+          )}
+          {game.type === 'word-scramble' && (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onEditGame}
+              className="w-full px-4 md:px-6 py-3 md:py-4 text-sm md:text-base bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-full font-serif font-semibold shadow-lg transition-all"
+            >
+              ✏️ Edit Phrase
+            </motion.button>
+          )}
+          {game.type === 'memory-match' && (
+            <div className="w-full px-4 md:px-6 py-3 md:py-4 text-sm md:text-base bg-gray-100 text-gray-600 rounded-full font-serif font-semibold text-center">
+              Memory Match has no editable content
+            </div>
+          )}
 
           {/* Secondary Actions */}
           <div className="flex flex-col md:flex-row flex-wrap gap-2 md:gap-3">
@@ -1658,17 +1733,7 @@ function GameDetailsModal({ game, onClose, onEditGame, onEditQuiz, onEditRewards
                 📊 Completion Status
               </motion.button>
             )}
-            {game.type === 'quiz' && (
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={onEditRewards}
-                className="w-full md:flex-1 md:min-w-[140px] px-4 py-2.5 md:py-3 text-xs md:text-sm bg-pink-100 text-pink-700 rounded-full font-serif font-semibold shadow-sm"
-              >
-                {game.hasReward ? '🎁 Edit Rewards' : '🎁 Add Rewards'}
-              </motion.button>
-            )}
-            {game.type === 'memory-match' && (
+            {(game.type === 'quiz' || game.type === 'memory-match' || game.type === 'word-scramble') && (
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

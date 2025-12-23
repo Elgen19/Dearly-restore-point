@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import GameTypeSelection from './GameTypeSelection';
 import RewardSetup from './RewardSetup';
 import LoveQuizCreator from './LoveQuizCreator';
+import WordScrambleCreator from './WordScrambleCreator';
 import MessageModal from '../components/MessageModal.jsx';
 
 export default function GameCreationFlow({ onBack, onGameCreated, fromExtras = false, editGame = null }) {
@@ -66,7 +67,7 @@ export default function GameCreationFlow({ onBack, onGameCreated, fromExtras = f
       }
       setStep('rewardPrompt');
     } else {
-      // Quiz games need setup
+      // Quiz and word-scramble games need setup
       setStep('gameSetup');
     }
   };
@@ -145,7 +146,7 @@ export default function GameCreationFlow({ onBack, onGameCreated, fromExtras = f
 
   // Get available game types (filter out types that already exist, unless fromExtras)
   const getAvailableGameTypes = () => {
-    const allTypes = ['quiz', 'memory-match'];
+    const allTypes = ['quiz', 'memory-match', 'word-scramble'];
     // If fromExtras, allow all game types regardless of existing games
     if (fromExtras) {
       return allTypes;
@@ -200,6 +201,28 @@ export default function GameCreationFlow({ onBack, onGameCreated, fromExtras = f
           />
         </>
       );
+    } else if (gameType === 'word-scramble') {
+      return (
+        <>
+          <WordScrambleCreator
+            onBack={() => setStep('gameType')}
+            gameToEdit={editGame && gameType === 'word-scramble' ? editGame : null}
+            onSaved={(scrambleData) => {
+              handleGameSetupComplete({
+                title: scrambleData.title,
+                words: scrambleData.words,
+                settings: scrambleData.settings,
+              });
+            }}
+          />
+          <MessageModal
+            isOpen={modal.isOpen}
+            onClose={() => setModal({ isOpen: false, message: '', type: 'error' })}
+            message={modal.message}
+            type={modal.type}
+          />
+        </>
+      );
     } else if (gameType === 'memory-match') {
       return (
         <>
@@ -228,7 +251,7 @@ export default function GameCreationFlow({ onBack, onGameCreated, fromExtras = f
     return (
       <>
         <RewardPrompt
-          onBack={() => gameType === 'quiz' ? setStep('gameSetup') : setStep('gameType')}
+          onBack={() => (gameType === 'quiz' || gameType === 'word-scramble') ? setStep('gameSetup') : setStep('gameType')}
           onResponse={handleRewardPromptResponse}
         />
         <MessageModal

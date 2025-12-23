@@ -136,8 +136,8 @@ export default function FinalMessages({ onWriteBackChoice }) {
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-purple-900/10 to-transparent pointer-events-none" />
 
       {/* Main Content */}
-      <div className="relative z-10 flex items-center justify-center w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-4 overflow-y-auto">
-        <div className="w-full flex flex-col items-center gap-3 sm:gap-4">
+      <div className="relative z-10 flex items-center justify-center w-full max-w-4xl mx-auto px-2 sm:px-4 py-1 sm:py-4 overflow-y-auto max-h-full">
+        <div className="w-full flex flex-col items-center gap-2 sm:gap-4">
           {/* Messages Container and Prompt - Single AnimatePresence for smooth transition */}
           <AnimatePresence mode="wait">
             {!showPrompt ? (
@@ -147,16 +147,16 @@ export default function FinalMessages({ onWriteBackChoice }) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.6, ease: "easeInOut" }}
-                className="bg-gradient-to-b from-amber-50/95 via-white/95 to-amber-50/95 backdrop-blur-sm rounded-2xl md:rounded-3xl shadow-2xl border-2 md:border-4 border-amber-300/60 p-4 sm:p-6 md:p-8 lg:p-12 w-full"
+                className="bg-gradient-to-b from-amber-50/95 via-white/95 to-amber-50/95 backdrop-blur-sm rounded-2xl md:rounded-3xl shadow-2xl border-2 md:border-4 border-amber-300/60 p-3 sm:p-6 md:p-8 lg:p-12 w-full"
               >
-                <div className="space-y-4 sm:space-y-6">
+                <div className="space-y-2 sm:space-y-4 md:space-y-6">
                   {finalMessages.map((message, index) => (
                     <motion.p
                       key={index}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.5 + index * 0.3, duration: 0.6 }}
-                      className="text-gray-700 text-base sm:text-lg md:text-xl font-serif leading-relaxed text-center px-2"
+                      className="text-gray-700 text-sm sm:text-base md:text-lg lg:text-xl font-serif leading-relaxed text-center px-2"
                     >
                       {message}
                     </motion.p>
@@ -168,10 +168,10 @@ export default function FinalMessages({ onWriteBackChoice }) {
                   initial={{ opacity: 0, scale: 0 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: 2, duration: 0.8, type: "spring" }}
-                  className="flex justify-center mt-6 sm:mt-8"
+                  className="flex justify-center mt-3 sm:mt-6 md:mt-8"
                 >
                   <motion.div
-                    className="text-4xl sm:text-5xl"
+                    className="text-2xl sm:text-4xl md:text-5xl"
                     animate={{
                       scale: [1, 1.2, 1],
                     }}
@@ -193,13 +193,13 @@ export default function FinalMessages({ onWriteBackChoice }) {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.5 }}
-                      className="flex justify-center mt-6 sm:mt-8"
+                      className="flex justify-center mt-3 sm:mt-6 md:mt-8"
                     >
                       <motion.button
                         whileHover={{ scale: 1.05, boxShadow: "0 10px 30px rgba(236, 72, 153, 0.4)" }}
                         whileTap={{ scale: 0.95 }}
                         onClick={() => setShowPrompt(true)}
-                        className="w-full sm:w-auto px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-base sm:text-lg shadow-lg hover:shadow-xl transition-all"
+                        className="w-full sm:w-auto px-5 sm:px-6 md:px-8 py-2 sm:py-2.5 md:py-3 bg-gradient-to-r from-pink-500 via-rose-500 to-pink-500 text-white rounded-full font-serif text-sm sm:text-base md:text-lg shadow-lg hover:shadow-xl transition-all"
                       >
                         Continue
                       </motion.button>

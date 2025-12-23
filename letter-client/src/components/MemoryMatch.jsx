@@ -742,7 +742,7 @@ export default function MemoryMatch({ onBack, onPrizeWon, userId, letterId, game
 
         {/* Game over - Show GameCompletionScreen if prize won and has rewards, otherwise show simple completion */}
         <AnimatePresence>
-          {gameOver && prizeWon && game?.hasReward && game?.rewards && showCompletionScreen && !showRewardFlow ? (
+          {gameOver && prizeWon && showCompletionScreen && !showRewardFlow ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -750,10 +750,12 @@ export default function MemoryMatch({ onBack, onPrizeWon, userId, letterId, game
               className="fixed inset-0 z-50"
             >
               <GameCompletionScreen
-                onClaimReward={() => {
+                score={score}
+                hasRewards={game?.hasReward && game?.rewards && Array.isArray(game.rewards) && game.rewards.length > 0}
+                onClaimReward={(game?.hasReward && game?.rewards && Array.isArray(game.rewards) && game.rewards.length > 0) ? () => {
                   setShowCompletionScreen(false);
                   setShowRewardFlow(true);
-                }}
+                } : undefined}
                 onMaybeLater={() => {
                   setGameOver(false);
                   setShowCompletionScreen(false);
@@ -819,67 +821,6 @@ export default function MemoryMatch({ onBack, onPrizeWon, userId, letterId, game
                     Back
                   </motion.button>
                 </div>
-              </motion.div>
-            </motion.div>
-          ) : gameOver && prizeWon && (!game?.hasReward || !game?.rewards) ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-gradient-to-br from-purple-900 to-pink-900 rounded-3xl p-8 md:p-12 max-w-md w-full border border-white/20 text-center"
-              >
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                  className="text-6xl mb-4"
-                >
-                  🎉
-                </motion.div>
-                <h2 className="text-3xl font-serif text-white mb-4">
-                  Congratulations!
-                </h2>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                  className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 mb-6"
-                >
-                  <p className="text-white/80 font-serif text-lg mb-2">
-                    Your Score:
-                  </p>
-                  <motion.p
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
-                    className="text-6xl font-serif font-bold text-yellow-300"
-                  >
-                    {score} points
-                  </motion.p>
-                </motion.div>
-                <motion.button
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.5 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => {
-                    setGameOver(false);
-                    if (onPrizeWon) {
-                      onPrizeWon(score);
-                    }
-                    if (onBack) onBack();
-                  }}
-                  className="px-8 py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-full font-serif font-semibold shadow-lg"
-                >
-                  Continue
-                </motion.button>
               </motion.div>
             </motion.div>
           ) : null}

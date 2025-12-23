@@ -5,6 +5,8 @@ const crypto = require("crypto");
 const rateLimit = require("express-rate-limit");
 const { db, storage } = require("../configs/firebase");
 const { verifyAuth, verifyOwnership } = require("../middleware/auth");
+const { sanitizeBody, validateTokenParam, validateUserIdParam, validateLetterIdParam, anonymizeIP } = require("../middleware/validation");
+const { logTokenAccess, logSecurityValidation, logRateLimitViolation } = require("../middleware/audit");
 
 // Security: Only log requests in development mode
 if (process.env.NODE_ENV === 'development') {
@@ -52,6 +54,24 @@ const tokenRegenerationLimiter = rateLimit({
   message: 'Too many token regenerations. Please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Rate limiting for security answer validation (romantic approach)
+const securityAnswerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per 15 minutes per IP
+  handler: async (req, res) => {
+    // Log rate limit violation
+    await logRateLimitViolation(req, 'security_validation');
+    res.status(429).json({
+      success: false,
+      message: "Take a gentle breath, dear one. Too many attempts have been made. Please wait a moment and try again with patience and care. 💕",
+      hint: "The answer will come to you when you're ready."
+    });
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // Don't count successful attempts
 });
 
 // Middleware to check if Firebase is initialized
@@ -192,7 +212,11 @@ router.get("/:userId", checkFirebase, async (req, res, next) => {
 });
 
 // GET /api/letters/token/:token - Fetch a letter by secure token (RECOMMENDED)
-router.get("/token/:token", tokenAccessLimiter, checkFirebase, async (req, res) => {
+router.get("/token/:token", 
+  tokenAccessLimiter, 
+  validateTokenParam, // ✅ Validate token format
+  checkFirebase, 
+  async (req, res) => {
   try {
     const { token } = req.params;
     
@@ -203,18 +227,27 @@ router.get("/token/:token", tokenAccessLimiter, checkFirebase, async (req, res) 
     
     if (!tokenData) {
       console.log('❌ Token not found in database:', token.substring(0, 8) + '...');
-      return res.status(404).json({ message: "Invalid or expired link" });
+      await logTokenAccess(req, token, false, 'token_not_found');
+      return res.status(404).json({ 
+        message: "This link seems to have wandered away. It may have been changed or the letter may have been moved. Please check with the sender for a new link. 💔"
+      });
     }
     
     // Check if token is active
     if (tokenData.isActive === false) {
       console.log('❌ Token is inactive (revoked):', token.substring(0, 8) + '...');
-      return res.status(410).json({ message: "Link has been revoked. The letter owner may have regenerated the link." });
+      await logTokenAccess(req, token, false, 'token_revoked');
+      return res.status(410).json({ 
+        message: "This link has been updated by the sender. Please ask them for the new link to access your letter. The old link is no longer valid. 💌"
+      });
     }
     
     // Check expiration
     if (tokenData.expiresAt && new Date(tokenData.expiresAt) < new Date()) {
-      return res.status(410).json({ message: "Link has expired" });
+      await logTokenAccess(req, token, false, 'token_expired');
+      return res.status(410).json({ 
+        message: "This link has reached the end of its journey. Please ask the sender for a new link to access your letter. 💕"
+      });
     }
     
     // Auto-renewal: If token expires within 30 days, extend it by 1 year
@@ -253,19 +286,35 @@ router.get("/token/:token", tokenAccessLimiter, checkFirebase, async (req, res) 
     if (!letter) {
       console.log('❌ Letter not found in database:', { userId, letterId });
       return res.status(404).json({ 
-        message: "Letter not found",
-        hint: "The letter may have been deleted or the token may be invalid"
+        message: "This letter seems to have been moved or removed. It may have been deleted by the sender. Please check with them. 💔"
       });
     }
     
     console.log('✅ Letter found:', { userId, letterId, hasSecurity: !!letter.securityType });
     
-    // Log access (optional - for analytics)
+    // Track token usage (first access, last access, access count)
+    const now = new Date().toISOString();
+    const tokenUpdateData = {
+      lastAccessedAt: now,
+      accessCount: (tokenData.accessCount || 0) + 1
+    };
+    
+    // Track first access if this is the first time
+    if (!tokenData.firstAccessedAt) {
+      tokenUpdateData.firstAccessedAt = now;
+    }
+    
+    await tokenRef.update(tokenUpdateData);
+    
+    // Log access (optional - for analytics) - with anonymized IP
     const accessLogRef = db.ref(`letterTokens/${token}/accessLog`).push();
     await accessLogRef.set({
-      accessedAt: new Date().toISOString(),
-      ip: req.ip || req.connection.remoteAddress
+      accessedAt: now,
+      ip: anonymizeIP(req.ip || req.connection.remoteAddress) // ✅ Anonymize IP
     });
+    
+    // Log successful token access
+    await logTokenAccess(req, token, true);
     
     // Return letter data (without sensitive token info)
     // IMPORTANT: userId must come AFTER spreading letter to ensure it's not overwritten
@@ -279,9 +328,13 @@ router.get("/token/:token", tokenAccessLimiter, checkFirebase, async (req, res) 
     });
   } catch (error) {
     console.error("Error fetching letter by token:", error);
+    // Don't expose internal error details in production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error.message 
+      : "Something unexpected happened while loading your letter. Please try again in a moment. 🌙";
     res.status(500).json({ 
-      message: "Error fetching letter", 
-      error: error.message 
+      message: "Something unexpected happened while loading your letter. Please try again in a moment. 🌙",
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
     });
   }
 });
@@ -309,20 +362,30 @@ router.get("/:userId/:letterId", checkFirebase, async (req, res, next) => {
 
 // POST /api/letters/:userId/:letterId/validate-security - Validate security answer
 // Moved here before POST /:userId to prevent route conflicts
-router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, res) => {
+router.post("/:userId/:letterId/validate-security", 
+  sanitizeBody, // ✅ Sanitize input
+  validateUserIdParam, // ✅ Validate userId format
+  validateLetterIdParam, // ✅ Validate letterId format
+  securityAnswerLimiter, // ✅ Rate limiting with romantic messages
+  checkFirebase, 
+  async (req, res) => {
   console.log('🔐 validate-security endpoint hit:', { userId: req.params.userId, letterId: req.params.letterId });
-  console.log('🔐 Request body:', req.body);
+  // Security: Don't log request body in production (may contain sensitive answer)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔐 Request body:', { ...req.body, answer: req.body.answer ? '[REDACTED]' : undefined });
+  }
   try {
     const { userId, letterId } = req.params;
     const { answer } = req.body; // User's submitted answer
 
-    console.log('🔐 Processing validation:', { userId, letterId, hasAnswer: !!answer, answer });
+    // Security: Never log the actual answer
+    console.log('🔐 Processing validation:', { userId, letterId, hasAnswer: !!answer });
 
     if (!answer) {
       console.log('❌ No answer provided');
       return res.status(400).json({ 
         success: false,
-        message: "Answer is required" 
+        message: "Please share your answer, dear one. The letter is waiting for you. 💌"
       });
     }
 
@@ -338,7 +401,7 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
       console.log('❌ Letter not found in database');
       return res.status(404).json({ 
         success: false,
-        message: "Letter not found" 
+        message: "This letter seems to have wandered away. It may have been moved or the link may have changed. 💔"
       });
     }
 
@@ -346,7 +409,7 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
     if (!letter.securityType || !letter.securityConfig) {
       return res.status(400).json({ 
         success: false,
-        message: "Letter does not have security configured" 
+        message: "This letter doesn't require a special answer. It's ready for you to read. 💌"
       });
     }
 
@@ -362,7 +425,7 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
       if (!storedHash) {
         return res.status(500).json({ 
           success: false,
-          message: "Security configuration error: hash not found" 
+          message: "Something unexpected happened while preparing your letter. Please try again in a moment. 🌙"
         });
       }
 
@@ -376,7 +439,7 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
       if (!storedHash) {
         return res.status(500).json({ 
           success: false,
-          message: "Security configuration error: hash not found" 
+          message: "Something unexpected happened while preparing your letter. Please try again in a moment. 🌙"
         });
       }
 
@@ -384,11 +447,14 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
     } else {
       return res.status(400).json({ 
         success: false,
-        message: "Unknown security type" 
+        message: "This letter has a special way of being unlocked. Please check the link and try again. ✨"
       });
     }
 
     console.log('🔐 Validation result:', { isCorrect, securityType });
+    
+    // Log security validation attempt
+    await logSecurityValidation(req, letterId, isCorrect, isCorrect ? 'success' : 'incorrect_answer');
     
     // If answer is correct, update letter status to "read" and create notification
     if (isCorrect) {
@@ -427,9 +493,16 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
     const response = { 
       success: true,
       isCorrect: isCorrect,
-      message: isCorrect ? "Answer is correct" : "Answer is incorrect"
+      message: isCorrect 
+        ? "Perfect! Your answer opens the way. The letter awaits you with open arms. 💌✨" 
+        : "That's not quite the answer this letter is looking for. Take your time, breathe, and try again with care. The right answer will come to you. 💕"
     };
-    console.log('🔐 Sending response:', response);
+    // Security: Don't log response with isCorrect in production
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔐 Sending response:', response);
+    } else {
+      console.log('🔐 Sending response:', { success: response.success, isCorrect: '[REDACTED]' });
+    }
     res.status(200).json(response);
     console.log('✅ Response sent successfully');
   } catch (error) {
@@ -437,8 +510,7 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
     console.error("❌ Error stack:", error.stack);
     res.status(500).json({ 
       success: false,
-      message: "Error validating answer", 
-      error: error.message 
+      message: "Something unexpected happened while checking your answer. Please take a moment and try again. The letter will wait for you. 🌙"
     });
   }
 });
@@ -446,6 +518,9 @@ router.post("/:userId/:letterId/validate-security", checkFirebase, async (req, r
 // POST /api/letters/:userId/:letterId/regenerate-token - Regenerate token for an existing letter
 // Moved here before POST /:userId to prevent route conflicts
 router.post("/:userId/:letterId/regenerate-token", 
+  sanitizeBody, // ✅ Sanitize input
+  validateUserIdParam, // ✅ Validate userId format
+  validateLetterIdParam, // ✅ Validate letterId format
   tokenRegenerationLimiter, // ✅ Rate limiting
   verifyAuth,               // ✅ Verify user is authenticated
   verifyOwnership,          // ✅ Verify user owns the letter
@@ -854,7 +929,13 @@ router.post("/:userId/:letterId/responses", checkFirebase, async (req, res) => {
 
 // POST /api/letters/:userId - Create a new letter
 // NOTE: This route must come AFTER all specific routes like /validate-security, /regenerate-token, etc.
-router.post("/:userId", checkFirebase, async (req, res) => {
+router.post("/:userId", 
+  sanitizeBody, // ✅ Sanitize input
+  validateUserIdParam, // ✅ Validate userId format
+  verifyAuth, 
+  verifyOwnership, 
+  checkFirebase, 
+  async (req, res) => {
   // Debug: Log if this route is being hit when it shouldn't be
   if (req.path.includes('validate-security') || req.path.includes('regenerate-token') || req.path.includes('responses')) {
     console.error('⚠️ WARNING: POST /:userId route matched when it should not have! Path:', req.path);
@@ -1077,7 +1158,20 @@ router.post("/:userId", checkFirebase, async (req, res) => {
     const letterId = newLetterRef.key;
     
     console.log('💾 About to save letter with ID:', letterId);
-    console.log('💾 newLetter object before save:', JSON.stringify(newLetter, null, 2));
+    // Security: Only log full letter object in development (contains personal content)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('💾 newLetter object before save:', JSON.stringify(newLetter, null, 2));
+    } else {
+      // In production, only log metadata
+      console.log('💾 newLetter metadata:', {
+        letterId,
+        hasIntroductory: !!newLetter.introductory,
+        hasMainBody: !!newLetter.mainBody,
+        hasClosing: !!newLetter.closing,
+        hasSecurity: !!newLetter.securityType,
+        receiverEmail: newLetter.receiverEmail ? `${newLetter.receiverEmail.split('@')[0]}@***` : undefined
+      });
+    }
     
     await newLetterRef.set(newLetter);
 
@@ -1125,7 +1219,19 @@ router.post("/:userId", checkFirebase, async (req, res) => {
         hasClosingStyle: 'closingStyle' in savedData,
         closingStyle: savedData.closingStyle
       });
-      console.log('✅ Full saved letter data:', JSON.stringify(savedData, null, 2));
+      // Security: Only log full letter data in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Full saved letter data:', JSON.stringify(savedData, null, 2));
+      } else {
+        // In production, only log metadata
+        console.log('✅ Letter saved successfully:', {
+          letterId: savedData.id || letterId,
+          hasIntroductory: !!savedData.introductory,
+          hasMainBody: !!savedData.mainBody,
+          hasClosing: !!savedData.closing,
+          hasSecurity: !!savedData.securityType
+        });
+      }
       
       // Also query the parent node to see all letters
       const allLettersSnapshot = await lettersRef.once("value");
